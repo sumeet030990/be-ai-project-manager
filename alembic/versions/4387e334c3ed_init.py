@@ -1,8 +1,8 @@
 """init
 
-Revision ID: 72a2d8213aba
+Revision ID: 4387e334c3ed
 Revises: 
-Create Date: 2026-05-01 18:39:15.558439
+Create Date: 2026-05-02 01:29:00.611662
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = '72a2d8213aba'
+revision: str = '4387e334c3ed'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -99,6 +99,36 @@ def upgrade() -> None:
     op.create_index('ix_projects_company_id', 'projects', ['company_id'], unique=False)
     op.create_index('ix_projects_name', 'projects', ['name'], unique=False)
     op.create_index('ix_projects_status', 'projects', ['status'], unique=False)
+    op.create_table('modules',
+    sa.Column('project_id', sa.UUID(), nullable=False),
+    sa.Column('created_by', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('order', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=False),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_modules_project_id', 'modules', ['project_id'], unique=False)
+    op.create_index('ix_modules_status', 'modules', ['status'], unique=False)
+    op.create_table('project_tech_stacks',
+    sa.Column('project_id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('version', sa.String(length=100), nullable=True),
+    sa.Column('category', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_project_tech_stacks_category', 'project_tech_stacks', ['category'], unique=False)
+    op.create_index('ix_project_tech_stacks_project_id', 'project_tech_stacks', ['project_id'], unique=False)
     op.create_table('project_users',
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('project_id', sa.UUID(), nullable=False),
@@ -112,14 +142,71 @@ def upgrade() -> None:
     )
     op.create_index('ix_project_users_project_id', 'project_users', ['project_id'], unique=False)
     op.create_index('ix_project_users_user_id', 'project_users', ['user_id'], unique=False)
+    op.create_table('project_plugins',
+    sa.Column('project_id', sa.UUID(), nullable=False),
+    sa.Column('tech_stack_id', sa.UUID(), nullable=False),
+    sa.Column('name', sa.String(length=255), nullable=False),
+    sa.Column('version', sa.String(length=100), nullable=True),
+    sa.Column('ecosystem', sa.String(length=100), nullable=True),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['tech_stack_id'], ['project_tech_stacks.id'], ondelete='RESTRICT'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_project_plugins_ecosystem', 'project_plugins', ['ecosystem'], unique=False)
+    op.create_index('ix_project_plugins_project_id', 'project_plugins', ['project_id'], unique=False)
+    op.create_index('ix_project_plugins_tech_stack_id', 'project_plugins', ['tech_stack_id'], unique=False)
+    op.create_table('stories',
+    sa.Column('module_id', sa.UUID(), nullable=True),
+    sa.Column('parent_story_id', sa.UUID(), nullable=True),
+    sa.Column('story_type', sa.String(length=20), nullable=False),
+    sa.Column('title', sa.String(length=255), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('order', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(length=50), nullable=False),
+    sa.Column('is_ai_generated', sa.Boolean(), nullable=False),
+    sa.Column('azure_work_item_id', sa.Integer(), nullable=True),
+    sa.Column('business_rules', sa.Text(), nullable=True),
+    sa.Column('acceptance_criteria', sa.Text(), nullable=True),
+    sa.Column('file_references', sa.Text(), nullable=True),
+    sa.Column('urls', sa.Text(), nullable=True),
+    sa.Column('id', sa.UUID(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.ForeignKeyConstraint(['module_id'], ['modules.id'], ondelete='CASCADE'),
+    sa.ForeignKeyConstraint(['parent_story_id'], ['stories.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index('ix_stories_module_id', 'stories', ['module_id'], unique=False)
+    op.create_index('ix_stories_parent_story_id', 'stories', ['parent_story_id'], unique=False)
+    op.create_index('ix_stories_status', 'stories', ['status'], unique=False)
+    op.create_index('ix_stories_story_type', 'stories', ['story_type'], unique=False)
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index('ix_stories_story_type', table_name='stories')
+    op.drop_index('ix_stories_status', table_name='stories')
+    op.drop_index('ix_stories_parent_story_id', table_name='stories')
+    op.drop_index('ix_stories_module_id', table_name='stories')
+    op.drop_table('stories')
+    op.drop_index('ix_project_plugins_tech_stack_id', table_name='project_plugins')
+    op.drop_index('ix_project_plugins_project_id', table_name='project_plugins')
+    op.drop_index('ix_project_plugins_ecosystem', table_name='project_plugins')
+    op.drop_table('project_plugins')
     op.drop_index('ix_project_users_user_id', table_name='project_users')
     op.drop_index('ix_project_users_project_id', table_name='project_users')
     op.drop_table('project_users')
+    op.drop_index('ix_project_tech_stacks_project_id', table_name='project_tech_stacks')
+    op.drop_index('ix_project_tech_stacks_category', table_name='project_tech_stacks')
+    op.drop_table('project_tech_stacks')
+    op.drop_index('ix_modules_status', table_name='modules')
+    op.drop_index('ix_modules_project_id', table_name='modules')
+    op.drop_table('modules')
     op.drop_index('ix_projects_status', table_name='projects')
     op.drop_index('ix_projects_name', table_name='projects')
     op.drop_index('ix_projects_company_id', table_name='projects')

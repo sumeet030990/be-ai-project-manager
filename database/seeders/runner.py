@@ -5,6 +5,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from app.core.database import AsyncSessionFactory
+import database.models.module  # noqa: F401
+import database.models.story  # noqa: F401
+import database.models.project_tech_stack  # noqa: F401
+import database.models.project_plugin  # noqa: F401
 from database.seeders.company_seeder import seed_companies
 from database.seeders.project_seeder import seed_projects
 from database.seeders.project_plugin_seeder import seed_project_plugins
