@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from app.controllers import user_controller
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
+from app.schemas.project import ProjectResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -33,6 +34,16 @@ async def create_user(payload: UserCreate, db: DBSession):
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(user_id: uuid.UUID, payload: UserUpdate, db: DBSession):
     return await user_controller.update_user(user_id=user_id, payload=payload, db=db)
+
+
+@router.get("/{user_id}/projects", response_model=PaginatedResponse[ProjectResponse])
+async def list_user_projects(
+    user_id: uuid.UUID,
+    db: DBSession,
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=100),
+):
+    return await user_controller.list_user_projects(user_id=user_id, page=page, size=size, db=db)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,5 +1,6 @@
 import logging
 
+import database.models  # noqa: F401 — registers all ORM models with SQLAlchemy mapper
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

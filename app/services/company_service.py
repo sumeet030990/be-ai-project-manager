@@ -17,7 +17,7 @@ class CompanyService:
     async def get_company(self, company_id: uuid.UUID) -> CompanyResponse:
         company = await self.repository.get_by_id(company_id)
         if not company:
-            raise NotFoundException("Company", company_id)
+            raise NotFoundException("Company", str(company_id))
         return CompanyResponse.model_validate(company)
 
     async def list_companies(self, page: int, size: int) -> PaginatedResponse[CompanyResponse]:
@@ -44,7 +44,7 @@ class CompanyService:
     async def update_company(self, company_id: uuid.UUID, payload: CompanyUpdate) -> CompanyResponse:
         company = await self.repository.get_by_id(company_id)
         if not company:
-            raise NotFoundException("Company", company_id)
+            raise NotFoundException("Company", str(company_id))
 
         update_data = payload.model_dump(exclude_unset=True)
 
@@ -67,5 +67,5 @@ class CompanyService:
     async def delete_company(self, company_id: uuid.UUID) -> None:
         company = await self.repository.get_by_id(company_id)
         if not company:
-            raise NotFoundException("Company", company_id)
+            raise NotFoundException("Company", str(company_id))
         await self.repository.delete(company)

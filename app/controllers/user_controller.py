@@ -5,6 +5,7 @@ from fastapi.responses import Response
 
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
+from app.schemas.project import ProjectResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
@@ -23,6 +24,10 @@ async def create_user(payload: UserCreate, db: DBSession) -> UserResponse:
 
 async def update_user(user_id: uuid.UUID, payload: UserUpdate, db: DBSession) -> UserResponse:
     return await UserService(db).update_user(user_id, payload)
+
+
+async def list_user_projects(user_id: uuid.UUID, page: int, size: int, db: DBSession) -> PaginatedResponse[ProjectResponse]:
+    return await UserService(db).list_user_projects(user_id, page=page, size=size)
 
 
 async def delete_user(user_id: uuid.UUID, db: DBSession) -> Response:

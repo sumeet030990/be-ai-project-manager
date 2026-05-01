@@ -18,5 +18,5 @@ class RoleService:
     async def get_role(self, role_id: uuid.UUID) -> RoleResponse:
         role = await self.repository.get_by_id(role_id)
         if not role:
-            raise NotFoundException("Role", role_id)
+            raise NotFoundException("Role", str(role_id))
         return RoleResponse.model_validate(role)

@@ -7,9 +7,11 @@ from app.core.exceptions import BadRequestException, ConflictException, NotFound
 from app.core.security import hash_password
 from database.models.user import User
 from app.repositories.company_repository import CompanyRepository
+from app.repositories.project_repository import ProjectRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.common import PaginatedResponse
+from app.schemas.project import ProjectResponse
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
 
 
@@ -18,11 +20,12 @@ class UserService:
         self.repository = UserRepository(session)
         self.role_repository = RoleRepository(session)
         self.company_repository = CompanyRepository(session)
+        self.project_repository = ProjectRepository(session)
 
     async def get_user(self, user_id: uuid.UUID) -> UserResponse:
         user = await self.repository.get_by_id(user_id)
         if not user:
-            raise NotFoundException("User", user_id)
+            raise NotFoundException("User", str(user_id))
         return UserResponse.model_validate(user)
 
     async def list_users(self, page: int, size: int) -> PaginatedResponse[UserResponse]:
@@ -69,7 +72,7 @@ class UserService:
     async def update_user(self, user_id: uuid.UUID, payload: UserUpdate) -> UserResponse:
         user = await self.repository.get_by_id(user_id)
         if not user:
-            raise NotFoundException("User", user_id)
+            raise NotFoundException("User", str(user_id))
 
         update_data = payload.model_dump(exclude_unset=True)
 
@@ -85,8 +88,21 @@ class UserService:
         user = await self.repository.update(user)
         return UserResponse.model_validate(user)
 
+    async def list_user_projects(self, user_id: uuid.UUID, page: int, size: int) -> PaginatedResponse[ProjectResponse]:
+        if not await self.repository.get_by_id(user_id):
+            raise NotFoundException("User", str(user_id))
+        skip = (page - 1) * size
+        items, total = await self.project_repository.get_projects_by_user(user_id, skip=skip, limit=size)
+        return PaginatedResponse(
+            items=[ProjectResponse.model_validate(p) for p in items],
+            total=total,
+            page=page,
+            size=size,
+            pages=math.ceil(total / size) if total else 0,
+        )
+
     async def delete_user(self, user_id: uuid.UUID) -> None:
         user = await self.repository.get_by_id(user_id)
         if not user:
-            raise NotFoundException("User", user_id)
+            raise NotFoundException("User", str(user_id))
         await self.repository.delete(user)
