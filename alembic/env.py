@@ -12,6 +12,8 @@ import database.models.project  # noqa: F401
 import database.models.role  # noqa: F401
 import database.models.user  # noqa: F401
 import database.models.project_user  # noqa: F401
+import database.models.project_tech_stack  # noqa: F401
+import database.models.project_plugin  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

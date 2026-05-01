@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from database.models.company import Company
     from database.models.user import User
     from database.models.project_user import ProjectUser
+    from database.models.project_tech_stack import ProjectTechStack
+    from database.models.project_plugin import ProjectPlugin
 
 
 class Project(BaseModel):
@@ -34,6 +36,8 @@ class Project(BaseModel):
     company: Mapped["Company"] = relationship("Company", lazy="noload")
     creator: Mapped["User"] = relationship("User", foreign_keys=[created_by], lazy="noload")
     project_users: Mapped[list["ProjectUser"]] = relationship("ProjectUser", back_populates="project", lazy="noload")
+    tech_stacks: Mapped[list["ProjectTechStack"]] = relationship("ProjectTechStack", back_populates="project", lazy="noload")
+    plugins: Mapped[list["ProjectPlugin"]] = relationship("ProjectPlugin", back_populates="project", lazy="noload")
 
     __table_args__ = (
         Index("ix_projects_name", "name"),

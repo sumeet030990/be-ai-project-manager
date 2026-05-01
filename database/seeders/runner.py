@@ -7,6 +7,8 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from app.core.database import AsyncSessionFactory
 from database.seeders.company_seeder import seed_companies
 from database.seeders.project_seeder import seed_projects
+from database.seeders.project_plugin_seeder import seed_project_plugins
+from database.seeders.project_tech_stack_seeder import seed_project_tech_stacks
 from database.seeders.project_user_seeder import seed_project_users
 from database.seeders.role_seeder import seed_roles
 from database.seeders.user_seeder import seed_users
@@ -20,6 +22,8 @@ async def run() -> None:
             users = await seed_users(session, roles)
             projects = await seed_projects(session, companies, users)
             await seed_project_users(session, projects, users)
+            await seed_project_tech_stacks(session, projects)
+            await seed_project_plugins(session, projects)
             await session.commit()
             print("[runner] seeding completed successfully.")
         except Exception:
