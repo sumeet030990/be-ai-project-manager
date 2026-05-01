@@ -1,8 +1,8 @@
 """init
 
-Revision ID: b70ead632eb1
+Revision ID: 72a2d8213aba
 Revises: 
-Create Date: 2026-04-30 16:20:39.426554
+Create Date: 2026-05-01 18:39:15.558439
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'b70ead632eb1'
+revision: str = '72a2d8213aba'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -84,6 +84,7 @@ def upgrade() -> None:
     op.create_table('projects',
     sa.Column('name', sa.String(length=255), nullable=False),
     sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('project_info', sa.Text(), nullable=True),
     sa.Column('status', sa.String(length=50), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('company_id', sa.UUID(), nullable=False),

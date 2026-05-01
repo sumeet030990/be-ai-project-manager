@@ -19,6 +19,7 @@ async def list_projects(
     size: int = Query(default=20, ge=1, le=100),
     company_id: uuid.UUID | None = Query(default=None),
 ):
+    """List projects with pagination. Can also filter projects by company if company_id is provided."""
     return await project_controller.list_projects(page=page, size=size, company_id=company_id, db=db)
 
 
