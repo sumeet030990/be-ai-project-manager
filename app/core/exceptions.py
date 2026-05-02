@@ -36,6 +36,15 @@ class BadRequestException(AppException):
         )
 
 
+class ServiceUnavailableException(AppException):
+    def __init__(self, detail: str = "AI provider is not configured."):
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+            error_code="SERVICE_UNAVAILABLE",
+        )
+
+
 async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,

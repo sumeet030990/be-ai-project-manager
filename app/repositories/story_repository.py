@@ -15,15 +15,13 @@ class StoryRepository(BaseRepository[Story]):
 
     async def get_all_by_module(self, module_id: uuid.UUID, skip: int, limit: int) -> tuple[list[Story], int]:
         count_result = await self.session.execute(
-            select(func.count()).select_from(Story).where(
-                Story.module_id == module_id, Story.story_type == "story"
-            )
+            select(func.count()).select_from(Story).where(Story.module_id == module_id)
         )
         total = count_result.scalar_one()
 
         result = await self.session.execute(
             select(Story)
-            .where(Story.module_id == module_id, Story.story_type == "story")
+            .where(Story.module_id == module_id)
             .order_by(Story.order)
             .offset(skip)
             .limit(limit)
@@ -32,31 +30,13 @@ class StoryRepository(BaseRepository[Story]):
 
     async def get_by_module_and_id(self, module_id: uuid.UUID, story_id: uuid.UUID) -> Story | None:
         result = await self.session.execute(
-            select(Story).where(Story.module_id == module_id, Story.id == story_id, Story.story_type == "story")
+            select(Story).where(Story.module_id == module_id, Story.id == story_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_all_sub_stories(self, parent_story_id: uuid.UUID, skip: int, limit: int) -> tuple[list[Story], int]:
-        count_result = await self.session.execute(
-            select(func.count()).select_from(Story).where(Story.parent_story_id == parent_story_id)
-        )
-        total = count_result.scalar_one()
-
-        result = await self.session.execute(
-            select(Story)
-            .where(Story.parent_story_id == parent_story_id)
-            .order_by(Story.order)
-            .offset(skip)
-            .limit(limit)
-        )
-        return list(result.scalars().all()), total
-
-    async def get_sub_story_by_id(self, parent_story_id: uuid.UUID, sub_story_id: uuid.UUID) -> Story | None:
-        result = await self.session.execute(
-            select(Story).where(
-                Story.parent_story_id == parent_story_id,
-                Story.id == sub_story_id,
-                Story.story_type == "sub_story",
-            )
-        )
-        return result.scalar_one_or_none()
+    async def bulk_create(self, stories: list[Story]) -> list[Story]:
+        self.session.add_all(stories)
+        await self.session.flush()
+        for story in stories:
+            await self.session.refresh(story)
+        return stories

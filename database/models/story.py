@@ -16,37 +16,23 @@ if TYPE_CHECKING:
 class Story(BaseModel):
     __tablename__ = "stories"
 
-    # Parent story fields (story_type = "story")
-    module_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("modules.id", ondelete="CASCADE"), nullable=True
+    module_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("modules.id", ondelete="CASCADE"), nullable=False
     )
-
-    # Child story fields (story_type = "sub_story")
-    parent_story_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("stories.id", ondelete="CASCADE"), nullable=True
-    )
-
-    story_type: Mapped[str] = mapped_column(String(20), default="story", nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     azure_work_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    # Only populated for sub_story
     business_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
     acceptance_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_references: Mapped[str | None] = mapped_column(Text, nullable=True)
     urls: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     module: Mapped["Module | None"] = relationship("Module", back_populates="stories", lazy="noload")
-    parent: Mapped["Story | None"] = relationship("Story", remote_side="Story.id", back_populates="sub_stories", lazy="noload")
-    sub_stories: Mapped[list["Story"]] = relationship("Story", back_populates="parent", lazy="noload")
 
     __table_args__ = (
         Index("ix_stories_module_id", "module_id"),
-        Index("ix_stories_parent_story_id", "parent_story_id"),
-        Index("ix_stories_story_type", "story_type"),
         Index("ix_stories_status", "status"),
     )
