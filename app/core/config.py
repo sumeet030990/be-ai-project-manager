@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
 
     DATABASE_URL: str = ""
+    GROQ_API_KEY: str = ""
 
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
