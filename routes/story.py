@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from app.controllers import story_controller
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
-from app.schemas.story import StoryCreate, StoryResponse, StoryUpdate
+from app.schemas.story import StoryCreate, StoryGenerateRequest, StoryRefineRequest, StoryResponse, StoryUpdate
 
 router = APIRouter(tags=["Stories"])
 
@@ -36,6 +36,11 @@ async def update_story(module_id: uuid.UUID, story_id: uuid.UUID, payload: Story
     return await story_controller.update_story(module_id=module_id, story_id=story_id, payload=payload, db=db)
 
 
+@router.post("/modules/{module_id}/stories/{story_id}/refine", response_model=StoryResponse)
+async def refine_story(module_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest, db: DBSession):
+    return await story_controller.refine_story(module_id=module_id, story_id=story_id, payload=payload, db=db)
+
+
 @router.delete("/modules/{module_id}/stories/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_story(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession) -> Response:
     return await story_controller.delete_story(module_id=module_id, story_id=story_id, db=db)
@@ -46,5 +51,5 @@ async def delete_story(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession)
     response_model=list[StoryResponse],
     status_code=status.HTTP_201_CREATED,
 )
-async def generate_stories(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession):
-    return await story_controller.generate_stories(project_id=project_id, module_id=module_id, db=db)
+async def generate_stories(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession, payload: StoryGenerateRequest | None = None):
+    return await story_controller.generate_stories(project_id=project_id, module_id=module_id, db=db, context=payload.context if payload else None)

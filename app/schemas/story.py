@@ -14,6 +14,22 @@ class StoryCreate(BaseModel):
     status: StoryStatus = "draft"
 
 
+class StoryGenerateRequest(BaseModel):
+    context: str | None = None
+
+
+class StoryRefineRequest(BaseModel):
+    context: str | None = None
+
+
+class StoryRefineResponse(BaseModel):
+    description: str
+    business_rules: str
+    acceptance_criteria: str
+    file_references: str
+    urls: str
+
+
 class StoryUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None

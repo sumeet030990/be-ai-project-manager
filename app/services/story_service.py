@@ -12,7 +12,7 @@ from app.repositories.project_plugin_repository import ProjectPluginRepository
 from app.repositories.project_tech_stack_repository import ProjectTechStackRepository
 from app.repositories.story_repository import StoryRepository
 from app.schemas.common import PaginatedResponse
-from app.schemas.story import StoryCreate, StoryResponse, StoryUpdate
+from app.schemas.story import StoryCreate, StoryRefineRequest, StoryRefineResponse, StoryResponse, StoryUpdate
 from database.models.story import Story
 
 _GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -39,6 +39,41 @@ _GENERATE_STORIES_TOOL: Any = {
                 }
             },
             "required": ["stories"],
+        },
+    },
+}
+
+
+_REFINE_STORY_TOOL: Any = {
+    "type": "function",
+    "function": {
+        "name": "refine_story",
+        "description": "Save the refined story details.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Detailed technical explanation of what needs to be implemented and why.",
+                },
+                "business_rules": {
+                    "type": "string",
+                    "description": "Business logic, constraints, and rules the implementation must follow.",
+                },
+                "acceptance_criteria": {
+                    "type": "string",
+                    "description": "Clear, testable conditions that must be met for this story to be considered done.",
+                },
+                "file_references": {
+                    "type": "string",
+                    "description": "Relevant files, directories, or modules in the codebase to look at or modify.",
+                },
+                "urls": {
+                    "type": "string",
+                    "description": "Relevant API routes, endpoints, or external documentation URLs.",
+                },
+            },
+            "required": ["description", "business_rules", "acceptance_criteria", "file_references", "urls"],
         },
     },
 }
@@ -115,9 +150,84 @@ class StoryService:
         story = await self._get_story_or_404(module_id, story_id)
         await self.repository.delete(story)
 
+    async def refine_story(self, module_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest) -> StoryResponse:
+        story = await self._get_story_or_404(module_id, story_id)
+        module = await self._get_module_or_404(module_id)
+
+        tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(module.project_id, skip=0, limit=500)
+        plugins, _ = await self.plugin_repository.get_all_by_project(module.project_id, skip=0, limit=500)
+        tech_context = _build_tech_context(tech_stacks, plugins)
+
+        is_refinement = any([
+            story.description, story.business_rules,
+            story.acceptance_criteria, story.file_references, story.urls,
+        ])
+
+        if is_refinement:
+            current_state = (
+                f"Current story details (already refined — update based on the manager's instructions):\n"
+                f"Description: {story.description or '-'}\n"
+                f"Business rules: {story.business_rules or '-'}\n"
+                f"Acceptance criteria: {story.acceptance_criteria or '-'}\n"
+                f"File references: {story.file_references or '-'}\n"
+                f"URLs: {story.urls or '-'}\n\n"
+            )
+        else:
+            current_state = ""
+
+        manager_note = (
+            f"Manager's instructions: {payload.context}\n\n"
+            if payload.context else
+            "No additional instructions — generate full details from scratch.\n\n"
+        )
+
+        response = await get_ai_client().chat.completions.create(
+            model=_GROQ_MODEL,
+            max_tokens=4096,
+            tools=[_REFINE_STORY_TOOL],
+            tool_choice={"type": "function", "function": {"name": "refine_story"}},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert software architect and project manager. "
+                        "You enrich user stories with detailed technical information to help developers implement them precisely.\n\n"
+                        f"Project tech stack:\n{tech_context}"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Module: {module.name}\n"
+                        f"Module description: {module.description or 'No description provided.'}\n\n"
+                        f"Story: {story.title}\n"
+                        f"Story description: {story.description or 'No description provided.'}\n\n"
+                        f"{current_state}"
+                        f"{manager_note}"
+                        "Provide:\n"
+                        "- A detailed technical description of what needs to be implemented\n"
+                        "- Business rules and constraints\n"
+                        "- Clear, testable acceptance criteria\n"
+                        "- Relevant files or directories in the codebase to reference or modify\n"
+                        "- Relevant API routes, endpoints, or documentation URLs"
+                    ),
+                },
+            ],
+        )
+
+        tool_calls = response.choices[0].message.tool_calls
+        if not tool_calls:
+            raise ServiceUnavailableException("AI did not return a structured response. Please try again.")
+
+        refined = StoryRefineResponse(**json.loads(tool_calls[0].function.arguments))
+        for field, value in refined.model_dump().items():
+            setattr(story, field, value)
+        story = await self.repository.update(story)
+        return StoryResponse.model_validate(story)
+
     # ── AI Generation ─────────────────────────────────────────────────────────
 
-    async def generate_stories(self, project_id: uuid.UUID, module_id: uuid.UUID) -> list[StoryResponse]:
+    async def generate_stories(self, project_id: uuid.UUID, module_id: uuid.UUID, context: str | None = None) -> list[StoryResponse]:
         module = await self.module_repository.get_by_project_and_id(project_id, module_id)
         if not module:
             raise NotFoundException("Module", str(module_id))
@@ -146,7 +256,8 @@ class StoryService:
                         f"Break down the following module into stories.\n\n"
                         f"Module: {module.name}\n"
                         f"Description: {module.description or 'No description provided.'}\n\n"
-                        "Rules:\n"
+                        + (f"Additional context:\n{context}\n\n" if context else "")
+                        + "Rules:\n"
                         "- Each story should be implementable in 1-3 days\n"
                         "- Title should be concise and action-oriented\n"
                         "- Description should explain what needs to be built and why\n"
