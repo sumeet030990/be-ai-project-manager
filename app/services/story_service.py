@@ -30,11 +30,17 @@ _GENERATE_STORIES_TOOL: Any = {
                     "items": {
                         "type": "object",
                         "properties": {
-                            "title": {"type": "string"},
+                            "title": {"type": "string", "description": "Story title prefixed with a type tag such as [FE], [BE], [API], [DB], [Infra], or [Test] based on the nature of the work."},
                             "description": {"type": "string"},
                             "order": {"type": "integer"},
+                            "story_points": {
+                                "type": "integer",
+                                "description": "Effort estimate using Fibonacci story points. Target 3 for most stories; use 5 only when the scope is clearly larger. Never exceed 5.",
+                                "minimum": 1,
+                                "maximum": 5,
+                            },
                         },
-                        "required": ["title", "description", "order"],
+                        "required": ["title", "description", "order", "story_points"],
                     },
                 }
             },
@@ -259,8 +265,17 @@ class StoryService:
                         + (f"Additional context:\n{context}\n\n" if context else "")
                         + "Rules:\n"
                         "- Each story should be implementable in 1-3 days\n"
-                        "- Title should be concise and action-oriented\n"
+                        "- Title must start with a type tag in square brackets based on the work area:\n"
+                        "  [FE] Frontend (UI, components, pages)\n"
+                        "  [BE] Backend (business logic, services, controllers)\n"
+                        "  [API] API endpoints or integrations\n"
+                        "  [DB] Database schema, migrations, queries\n"
+                        "  [Infra] Infrastructure, deployment, configuration\n"
+                        "  [Test] Testing, QA\n"
+                        "  Choose the single most appropriate tag for each story.\n"
+                        "- Title should be concise and action-oriented after the tag\n"
                         "- Description should explain what needs to be built and why\n"
+                        "- Story points: assign 3 for most stories (standard scope); use 5 only if clearly larger; never exceed 5\n"
                         "- Order stories by logical implementation sequence (dependencies first)\n"
                         "- Generate as many stories as needed to fully cover the module"
                     ),
@@ -279,6 +294,7 @@ class StoryService:
                 title=s["title"],
                 description=s.get("description"),
                 order=s.get("order", i),
+                story_points=min(s.get("story_points", 3), 5),
                 is_ai_generated=True,
             )
             for i, s in enumerate(raw_stories)

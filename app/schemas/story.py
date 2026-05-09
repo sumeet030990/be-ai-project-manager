@@ -12,6 +12,7 @@ class StoryCreate(BaseModel):
     description: str | None = None
     order: int = Field(default=0, ge=0)
     status: StoryStatus = "draft"
+    story_points: int | None = Field(default=None, ge=1, le=13)
 
 
 class StoryGenerateRequest(BaseModel):
@@ -35,6 +36,7 @@ class StoryUpdate(BaseModel):
     description: str | None = None
     order: int | None = Field(default=None, ge=0)
     status: StoryStatus | None = None
+    story_points: int | None = Field(default=None, ge=1, le=13)
     business_rules: str | None = None
     acceptance_criteria: str | None = None
     file_references: str | None = None
@@ -50,6 +52,7 @@ class StoryResponse(BaseModel):
     description: str | None
     order: int
     status: str
+    story_points: int | None
     is_ai_generated: bool
     azure_work_item_id: int | None
     business_rules: str | None
