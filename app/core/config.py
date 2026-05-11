@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GROQ_API_KEY: str = ""
 
+    JIRA_BASE_URL: str = ""
+    JIRA_EMAIL: str = ""
+    JIRA_API_KEY: str = ""
+    JIRA_PROJECT_KEY: str = ""
+    JIRA_ISSUE_TYPE: str = "Story"
+    JIRA_STORY_POINTS_FIELD: str = "customfield_10016"
+
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
     @field_validator("ALLOWED_ORIGINS", mode="before")

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from routes.company import router as company_router
+from routes.jira import router as jira_router
 from routes.module import router as module_router
 from routes.project import router as project_router
 from routes.project_plugin import router as project_plugin_router
@@ -19,3 +20,4 @@ api_router.include_router(project_tech_stack_router)
 api_router.include_router(project_plugin_router)
 api_router.include_router(module_router)
 api_router.include_router(story_router)
+api_router.include_router(jira_router)

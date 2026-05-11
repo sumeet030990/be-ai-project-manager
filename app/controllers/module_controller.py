@@ -25,6 +25,6 @@ async def update_module(project_id: uuid.UUID, module_id: uuid.UUID, payload: Mo
     return await ModuleService(db).update_module(project_id=project_id, module_id=module_id, payload=payload)
 
 
-async def delete_module(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession) -> Response:
-    await ModuleService(db).delete_module(project_id=project_id, module_id=module_id)
+async def delete_module(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession, delete_remote: bool = False) -> Response:
+    await ModuleService(db).delete_module(project_id=project_id, module_id=module_id, delete_remote=delete_remote)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

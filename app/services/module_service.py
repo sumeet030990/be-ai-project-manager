@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import NotFoundException
 from app.repositories.module_repository import ModuleRepository
 from app.repositories.project_repository import ProjectRepository
+from app.repositories.story_repository import StoryRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.module import ModuleCreate, ModuleResponse, ModuleUpdate
@@ -16,6 +17,7 @@ class ModuleService:
     def __init__(self, session: AsyncSession):
         self.repository = ModuleRepository(session)
         self.project_repository = ProjectRepository(session)
+        self.story_repository = StoryRepository(session)
         self.user_repository = UserRepository(session)
 
     async def list_modules(self, project_id: uuid.UUID, page: int, size: int) -> PaginatedResponse[ModuleResponse]:
@@ -55,8 +57,16 @@ class ModuleService:
         module = await self.repository.update(module)
         return ModuleResponse.model_validate(module)
 
-    async def delete_module(self, project_id: uuid.UUID, module_id: uuid.UUID) -> None:
+    async def delete_module(self, project_id: uuid.UUID, module_id: uuid.UUID, delete_remote: bool = False) -> None:
+        from app.services.jira_service import JiraService
+
         module = await self.repository.get_by_project_and_id(project_id, module_id)
         if not module:
             raise NotFoundException("Module", str(module_id))
+        if delete_remote:
+            linked_stories = await self.story_repository.get_jira_linked_stories_by_module(module_id)
+            if linked_stories:
+                jira = JiraService()
+                for story in linked_stories:
+                    await jira.delete_issue(story.jira_issue_key)
         await self.repository.delete(module)

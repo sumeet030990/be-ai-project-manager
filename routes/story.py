@@ -42,8 +42,13 @@ async def refine_story(module_id: uuid.UUID, story_id: uuid.UUID, payload: Story
 
 
 @router.delete("/modules/{module_id}/stories/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_story(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession) -> Response:
-    return await story_controller.delete_story(module_id=module_id, story_id=story_id, db=db)
+async def delete_story(
+    module_id: uuid.UUID,
+    story_id: uuid.UUID,
+    db: DBSession,
+    delete_remote: bool = Query(default=False),
+) -> Response:
+    return await story_controller.delete_story(module_id=module_id, story_id=story_id, db=db, delete_remote=delete_remote)
 
 
 @router.post(

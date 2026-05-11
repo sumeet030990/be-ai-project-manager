@@ -6,13 +6,13 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_client import get_ai_client
-from app.core.exceptions import NotFoundException, ServiceUnavailableException
+from app.core.exceptions import BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException
 from app.repositories.module_repository import ModuleRepository
 from app.repositories.project_plugin_repository import ProjectPluginRepository
 from app.repositories.project_tech_stack_repository import ProjectTechStackRepository
 from app.repositories.story_repository import StoryRepository
 from app.schemas.common import PaginatedResponse
-from app.schemas.story import StoryCreate, StoryRefineRequest, StoryRefineResponse, StoryResponse, StoryUpdate
+from app.schemas.story import JiraSyncFailure, JiraSyncResult, StoryCreate, StoryRefineRequest, StoryRefineResponse, StoryResponse, StoryUpdate
 from database.models.story import Story
 
 _GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -152,8 +152,13 @@ class StoryService:
         story = await self.repository.update(story)
         return StoryResponse.model_validate(story)
 
-    async def delete_story(self, module_id: uuid.UUID, story_id: uuid.UUID) -> None:
+    async def delete_story(self, module_id: uuid.UUID, story_id: uuid.UUID, delete_remote: bool = False) -> None:
+        from app.services.jira_service import JiraService
+
         story = await self._get_story_or_404(module_id, story_id)
+        if delete_remote and story.jira_issue_key:
+            jira = JiraService()
+            await jira.delete_issue(story.jira_issue_key)
         await self.repository.delete(story)
 
     async def refine_story(self, module_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest) -> StoryResponse:
@@ -228,6 +233,107 @@ class StoryService:
         refined = StoryRefineResponse(**json.loads(tool_calls[0].function.arguments))
         for field, value in refined.model_dump().items():
             setattr(story, field, value)
+        story = await self.repository.update(story)
+        return StoryResponse.model_validate(story)
+
+    # ── JIRA Sync ────────────────────────────────────────────────────────────
+
+    async def sync_stories_to_jira(self, module_id: uuid.UUID) -> JiraSyncResult:
+        from app.services.jira_service import JiraService
+
+        await self._get_module_or_404(module_id)
+
+        jira = JiraService()
+        jira_issues = await jira.fetch_all_issues()
+        existing_keys = await self.repository.get_existing_jira_keys()
+
+        new_issues = [issue for issue in jira_issues if issue.key not in existing_keys]
+        skipped = len(jira_issues) - len(new_issues)
+
+        imported: list[StoryResponse] = []
+        failed: list[JiraSyncFailure] = []
+
+        for order, issue in enumerate(new_issues):
+            try:
+                story = Story(
+                    module_id=module_id,
+                    title=issue.title,
+                    description=issue.description,
+                    status=issue.status,
+                    story_points=issue.story_points,
+                    order=order,
+                    jira_issue_key=issue.key,
+                )
+                story = await self.repository.create(story)
+                imported.append(StoryResponse.model_validate(story))
+            except Exception as exc:
+                failed.append(JiraSyncFailure(jira_key=issue.key, title=issue.title, error=str(exc)))
+
+        return JiraSyncResult(fetched=len(jira_issues), imported=imported, skipped=skipped, failed=failed)
+
+    async def pull_story_from_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        from app.services.jira_service import JiraService
+
+        story = await self._get_story_or_404(module_id, story_id)
+        if not story.jira_issue_key:
+            raise BadRequestException("Story is not linked to a JIRA issue.")
+
+        jira = JiraService()
+        issue = await jira.fetch_issue(story.jira_issue_key)
+        story.title = issue.title
+        story.description = issue.description
+        story.status = issue.status
+        story.story_points = issue.story_points
+        story = await self.repository.update(story)
+        return StoryResponse.model_validate(story)
+
+    async def create_story_in_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        from app.services.jira_service import JiraService
+
+        story = await self._get_story_or_404(module_id, story_id)
+        if story.jira_issue_key:
+            raise ConflictException(f"Story is already linked to JIRA issue {story.jira_issue_key}.")
+
+        jira = JiraService()
+        key = await jira.create_issue(
+            title=story.title,
+            description=story.description,
+            business_rules=story.business_rules,
+            acceptance_criteria=story.acceptance_criteria,
+            story_points=story.story_points,
+        )
+        story.jira_issue_key = key
+        story = await self.repository.update(story)
+        return StoryResponse.model_validate(story)
+
+    async def update_story_in_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        from app.services.jira_service import JiraService
+
+        story = await self._get_story_or_404(module_id, story_id)
+        if not story.jira_issue_key:
+            raise BadRequestException("Story is not linked to a JIRA issue. Create it in JIRA first.")
+
+        jira = JiraService()
+        await jira.update_issue(
+            issue_key=story.jira_issue_key,
+            title=story.title,
+            description=story.description,
+            business_rules=story.business_rules,
+            acceptance_criteria=story.acceptance_criteria,
+            story_points=story.story_points,
+        )
+        return StoryResponse.model_validate(story)
+
+    async def delete_story_from_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        from app.services.jira_service import JiraService
+
+        story = await self._get_story_or_404(module_id, story_id)
+        if not story.jira_issue_key:
+            raise BadRequestException("Story is not linked to a JIRA issue.")
+
+        jira = JiraService()
+        await jira.delete_issue(story.jira_issue_key)
+        story.jira_issue_key = None
         story = await self.repository.update(story)
         return StoryResponse.model_validate(story)
 

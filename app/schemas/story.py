@@ -55,9 +55,25 @@ class StoryResponse(BaseModel):
     story_points: int | None
     is_ai_generated: bool
     azure_work_item_id: int | None
+    jira_issue_key: str | None
     business_rules: str | None
     acceptance_criteria: str | None
     file_references: str | None
     urls: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class JiraSyncFailure(BaseModel):
+    jira_key: str
+    title: str
+    error: str
+
+
+class JiraSyncResult(BaseModel):
+    fetched: int
+    imported: list[StoryResponse]
+    skipped: int
+    failed: list[JiraSyncFailure]
+
+

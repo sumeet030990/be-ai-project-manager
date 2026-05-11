@@ -37,5 +37,10 @@ async def update_module(project_id: uuid.UUID, module_id: uuid.UUID, payload: Mo
 
 
 @router.delete("/{module_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_module(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession) -> Response:
-    return await module_controller.delete_module(project_id=project_id, module_id=module_id, db=db)
+async def delete_module(
+    project_id: uuid.UUID,
+    module_id: uuid.UUID,
+    db: DBSession,
+    delete_remote: bool = Query(default=False),
+) -> Response:
+    return await module_controller.delete_module(project_id=project_id, module_id=module_id, db=db, delete_remote=delete_remote)

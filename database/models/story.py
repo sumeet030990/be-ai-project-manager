@@ -26,6 +26,7 @@ class Story(BaseModel):
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     azure_work_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    jira_issue_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
     business_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
     acceptance_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     file_references: Mapped[str | None] = mapped_column(Text, nullable=True)
