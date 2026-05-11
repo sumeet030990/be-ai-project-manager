@@ -11,6 +11,7 @@ from database.models.base import BaseModel
 
 if TYPE_CHECKING:
     from database.models.module import Module
+    from database.models.test_case import TestCase
 
 
 class Story(BaseModel):
@@ -33,6 +34,7 @@ class Story(BaseModel):
     urls: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     module: Mapped["Module | None"] = relationship("Module", back_populates="stories", lazy="noload")
+    test_cases: Mapped[list["TestCase"]] = relationship("TestCase", back_populates="story", lazy="noload", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index("ix_stories_module_id", "module_id"),
