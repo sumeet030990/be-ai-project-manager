@@ -7,6 +7,7 @@ from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
 from app.schemas.story import JiraSyncResult, StoryCreate, StoryRefineRequest, StoryResponse, StoryUpdate
 from app.services.story_service import StoryService
+from app.services.jira_service import JiraService
 
 
 async def list_stories(module_id: uuid.UUID, page: int, size: int, db: DBSession) -> PaginatedResponse[StoryResponse]:
@@ -58,6 +59,7 @@ async def delete_story_from_jira(module_id: uuid.UUID, story_id: uuid.UUID, db: 
     return await StoryService(db).delete_story_from_jira(module_id=module_id, story_id=story_id)
 
 
-async def list_jira_issue_types() -> list[dict]:
-    from app.services.jira_service import JiraService
-    return await JiraService().fetch_issue_types()
+async def list_jira_issue_types(project_id: uuid.UUID, db: DBSession) -> list[dict]:
+    service = StoryService(db)
+    jira_project_key = await service._get_jira_project_key(project_id)
+    return await JiraService().fetch_issue_types(jira_project_key)

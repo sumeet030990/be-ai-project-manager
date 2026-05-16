@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     JIRA_BASE_URL: str = ""
     JIRA_EMAIL: str = ""
     JIRA_API_KEY: str = ""
-    JIRA_PROJECT_KEY: str = ""
     JIRA_ISSUE_TYPE: str = "Story"
     JIRA_STORY_POINTS_FIELD: str = "customfield_10016"
 

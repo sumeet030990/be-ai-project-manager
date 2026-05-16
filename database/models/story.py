@@ -24,6 +24,7 @@ class Story(BaseModel):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     story_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     azure_work_item_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

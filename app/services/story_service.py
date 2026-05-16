@@ -9,6 +9,7 @@ from app.core.ai_client import get_ai_client
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException
 from app.repositories.module_repository import ModuleRepository
 from app.repositories.project_plugin_repository import ProjectPluginRepository
+from app.repositories.project_repository import ProjectRepository
 from app.repositories.project_tech_stack_repository import ProjectTechStackRepository
 from app.repositories.story_repository import StoryRepository
 from app.schemas.common import PaginatedResponse
@@ -106,6 +107,7 @@ class StoryService:
     def __init__(self, session: AsyncSession):
         self.repository = StoryRepository(session)
         self.module_repository = ModuleRepository(session)
+        self.project_repository = ProjectRepository(session)
         self.tech_stack_repository = ProjectTechStackRepository(session)
         self.plugin_repository = ProjectPluginRepository(session)
 
@@ -120,6 +122,12 @@ class StoryService:
         if not story:
             raise NotFoundException("Story", str(story_id))
         return story
+
+    async def _get_jira_project_key(self, project_id: uuid.UUID) -> str:
+        project = await self.project_repository.get_by_id(project_id)
+        if not project or not project.jira_project_key:
+            raise ServiceUnavailableException("JIRA project key is not configured for this project.")
+        return project.jira_project_key
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -241,10 +249,11 @@ class StoryService:
     async def sync_stories_to_jira(self, module_id: uuid.UUID) -> JiraSyncResult:
         from app.services.jira_service import JiraService
 
-        await self._get_module_or_404(module_id)
+        module = await self._get_module_or_404(module_id)
+        jira_project_key = await self._get_jira_project_key(module.project_id)
 
         jira = JiraService()
-        jira_issues = await jira.fetch_all_issues()
+        jira_issues = await jira.fetch_all_issues(jira_project_key)
         existing_keys = await self.repository.get_existing_jira_keys()
 
         new_issues = [issue for issue in jira_issues if issue.key not in existing_keys]
@@ -294,8 +303,12 @@ class StoryService:
         if story.jira_issue_key:
             raise ConflictException(f"Story is already linked to JIRA issue {story.jira_issue_key}.")
 
+        module = await self._get_module_or_404(module_id)
+        jira_project_key = await self._get_jira_project_key(module.project_id)
+
         jira = JiraService()
         key = await jira.create_issue(
+            jira_project_key=jira_project_key,
             title=story.title,
             description=story.description,
             business_rules=story.business_rules,

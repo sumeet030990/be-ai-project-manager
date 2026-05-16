@@ -10,8 +10,8 @@ router = APIRouter(tags=["JIRA"])
 
 
 @router.get("/jira/issue-types")
-async def list_jira_issue_types():
-    return await story_controller.list_jira_issue_types()
+async def list_jira_issue_types(project_id: uuid.UUID, db: DBSession):
+    return await story_controller.list_jira_issue_types(project_id=project_id, db=db)
 
 
 @router.post("/modules/{module_id}/stories/{story_id}/jira/pull", response_model=StoryResponse)

@@ -114,9 +114,9 @@ class JiraService:
             fields[settings.JIRA_STORY_POINTS_FIELD] = story_points
         return fields
 
-    async def fetch_all_issues(self) -> list[JiraIssue]:
-        if not settings.JIRA_PROJECT_KEY:
-            raise ServiceUnavailableException("JIRA_PROJECT_KEY is not configured.")
+    async def fetch_all_issues(self, jira_project_key: str) -> list[JiraIssue]:
+        if not jira_project_key:
+            raise ServiceUnavailableException("JIRA project key is not configured for this project.")
 
         issues: list[JiraIssue] = []
         next_page_token: str | None = None
@@ -125,7 +125,7 @@ class JiraService:
         async with httpx.AsyncClient(timeout=30.0) as client:
             while True:
                 payload: dict[str, Any] = {
-                    "jql": f"project = {settings.JIRA_PROJECT_KEY} ORDER BY created DESC",
+                    "jql": f"project = {jira_project_key} ORDER BY created DESC",
                     "fields": fields,
                     "maxResults": 100,
                 }
@@ -164,13 +164,13 @@ class JiraService:
 
         return issues
 
-    async def fetch_issue_types(self) -> list[dict[str, Any]]:
-        if not settings.JIRA_PROJECT_KEY:
-            raise ServiceUnavailableException("JIRA_PROJECT_KEY is not configured.")
+    async def fetch_issue_types(self, jira_project_key: str) -> list[dict[str, Any]]:
+        if not jira_project_key:
+            raise ServiceUnavailableException("JIRA project key is not configured for this project.")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
-                f"{self._base_url}/rest/api/3/issue/createmeta/{settings.JIRA_PROJECT_KEY}/issuetypes",
+                f"{self._base_url}/rest/api/3/issue/createmeta/{jira_project_key}/issuetypes",
                 headers=self._headers,
             )
             if response.is_error:
@@ -179,9 +179,9 @@ class JiraService:
                 )
         return response.json().get("issueTypes", [])
 
-    async def _resolve_issue_type(self) -> str:
+    async def _resolve_issue_type(self, jira_project_key: str) -> str:
         try:
-            types = await self.fetch_issue_types()
+            types = await self.fetch_issue_types(jira_project_key)
             names = [t["name"] for t in types if not t.get("subtask", False)]
             if settings.JIRA_ISSUE_TYPE in names:
                 return settings.JIRA_ISSUE_TYPE
@@ -194,18 +194,19 @@ class JiraService:
 
     async def create_issue(
         self,
+        jira_project_key: str,
         title: str,
         description: str | None,
         business_rules: str | None,
         acceptance_criteria: str | None,
         story_points: int | None,
     ) -> str:
-        if not settings.JIRA_PROJECT_KEY:
-            raise ServiceUnavailableException("JIRA_PROJECT_KEY is not configured.")
+        if not jira_project_key:
+            raise ServiceUnavailableException("JIRA project key is not configured for this project.")
 
         fields = self._build_fields(title, description, business_rules, acceptance_criteria, story_points)
-        fields["project"] = {"key": settings.JIRA_PROJECT_KEY}
-        fields["issuetype"] = {"name": await self._resolve_issue_type()}
+        fields["project"] = {"key": jira_project_key}
+        fields["issuetype"] = {"name": await self._resolve_issue_type(jira_project_key)}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(

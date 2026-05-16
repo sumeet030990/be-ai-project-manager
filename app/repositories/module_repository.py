@@ -22,7 +22,7 @@ class ModuleRepository(BaseRepository[Module]):
         result = await self.session.execute(
             select(Module)
             .where(Module.project_id == project_id)
-            .order_by(Module.order)
+            .order_by(Module.priority, Module.order)
             .offset(skip)
             .limit(limit)
         )

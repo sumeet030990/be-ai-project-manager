@@ -12,6 +12,7 @@ class ModuleCreate(BaseModel):
     description: str | None = None
     order: int = Field(default=0, ge=0)
     status: ModuleStatus = "draft"
+    priority: int = Field(default=0, ge=0)
     created_by: uuid.UUID
 
 
@@ -20,6 +21,7 @@ class ModuleUpdate(BaseModel):
     description: str | None = None
     order: int | None = Field(default=None, ge=0)
     status: ModuleStatus | None = None
+    priority: int | None = Field(default=None, ge=0)
 
 
 class ModuleResponse(BaseModel):
@@ -32,5 +34,6 @@ class ModuleResponse(BaseModel):
     description: str | None
     order: int
     status: str
+    priority: int
     created_at: datetime
     updated_at: datetime
