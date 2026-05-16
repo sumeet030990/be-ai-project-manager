@@ -20,6 +20,10 @@ class ProjectUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class ProjectUserCreate(BaseModel):
+    user_ids: list[uuid.UUID] = Field(..., min_length=1)
+
+
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

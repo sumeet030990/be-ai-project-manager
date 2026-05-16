@@ -8,7 +8,7 @@ from app.repositories.company_repository import CompanyRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.common import PaginatedResponse
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate, ProjectUserCreate
 from app.schemas.user import UserResponse
 from database.models.project import Project
 
@@ -81,6 +81,33 @@ class ProjectService:
             size=size,
             pages=math.ceil(total / size) if total else 0,
         )
+
+    async def add_project_users(self, project_id: uuid.UUID, payload: ProjectUserCreate) -> list[UserResponse]:
+        if not await self.repository.get_by_id(project_id):
+            raise NotFoundException("Project", str(project_id))
+
+        users = []
+        for uid in payload.user_ids:
+            user = await self.user_repository.get_by_id(uid)
+            if not user:
+                raise NotFoundException("User", str(uid))
+            users.append(user)
+
+        existing_ids = await self.repository.get_existing_member_ids(project_id, payload.user_ids)
+        new_user_ids = [u.id for u in users if u.id not in existing_ids]
+
+        if new_user_ids:
+            await self.repository.add_users_to_project(project_id, new_user_ids)
+
+        return [UserResponse.model_validate(u) for u in users if u.id in set(new_user_ids)]
+
+    async def remove_project_user(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        if not await self.repository.get_by_id(project_id):
+            raise NotFoundException("Project", str(project_id))
+        project_user = await self.repository.get_project_user(project_id, user_id)
+        if not project_user:
+            raise NotFoundException("ProjectUser", f"{project_id}/{user_id}")
+        await self.repository.remove_user_from_project(project_user)
 
     async def delete_project(self, project_id: uuid.UUID) -> None:
         project = await self.repository.get_by_id(project_id)

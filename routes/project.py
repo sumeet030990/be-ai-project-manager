@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from app.controllers import project_controller
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
-from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate, ProjectUserCreate
 from app.schemas.user import UserResponse
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -46,6 +46,16 @@ async def list_project_users(
     size: int = Query(default=20, ge=1, le=100),
 ):
     return await project_controller.list_project_users(project_id=project_id, page=page, size=size, db=db)
+
+
+@router.post("/{project_id}/users", response_model=list[UserResponse], status_code=status.HTTP_201_CREATED)
+async def add_project_users(project_id: uuid.UUID, payload: ProjectUserCreate, db: DBSession):
+    return await project_controller.add_project_users(project_id=project_id, payload=payload, db=db)
+
+
+@router.delete("/{project_id}/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_project_user(project_id: uuid.UUID, user_id: uuid.UUID, db: DBSession) -> Response:
+    return await project_controller.remove_project_user(project_id=project_id, user_id=user_id, db=db)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
