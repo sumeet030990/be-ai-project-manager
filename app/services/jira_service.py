@@ -208,6 +208,16 @@ class JiraService:
         except Exception:
             return settings.JIRA_ISSUE_TYPE
 
+    async def _resolve_epic_type(self, jira_project_key: str) -> str:
+        try:
+            types = await self.fetch_issue_types(jira_project_key)
+            names = [t["name"] for t in types]
+            if "Epic" in names:
+                return "Epic"
+        except Exception:
+            pass
+        return "Epic"
+
     async def create_issue(
         self,
         jira_project_key: str,
@@ -216,13 +226,24 @@ class JiraService:
         business_rules: str | None,
         acceptance_criteria: str | None,
         story_points: int | None,
+        parent_key: str | None = None,
+        issue_type: str | None = None,
     ) -> str:
         if not jira_project_key:
             raise ServiceUnavailableException("JIRA project key is not configured for this project.")
 
         fields = self._build_fields(title, description, business_rules, acceptance_criteria, story_points)
         fields["project"] = {"key": jira_project_key}
-        fields["issuetype"] = {"name": await self._resolve_issue_type(jira_project_key)}
+
+        if issue_type:
+            fields["issuetype"] = {"name": issue_type}
+        elif parent_key:
+            fields["issuetype"] = {"name": await self._resolve_issue_type(jira_project_key)}
+        else:
+            fields["issuetype"] = {"name": await self._resolve_issue_type(jira_project_key)}
+
+        if parent_key:
+            fields["parent"] = {"key": parent_key}
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(

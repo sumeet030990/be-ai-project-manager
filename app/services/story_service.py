@@ -367,6 +367,20 @@ class StoryService:
         jira_project_key = await self._get_jira_project_key(module.project_id)
 
         jira = JiraService()
+
+        if not module.jira_epic_key:
+            epic_key = await jira.create_issue(
+                jira_project_key=jira_project_key,
+                title=module.name,
+                description=module.description,
+                business_rules=None,
+                acceptance_criteria=None,
+                story_points=None,
+                issue_type=await jira._resolve_epic_type(jira_project_key),
+            )
+            module.jira_epic_key = epic_key
+            await self.module_repository.update(module)
+
         key = await jira.create_issue(
             jira_project_key=jira_project_key,
             title=story.title,
@@ -374,6 +388,7 @@ class StoryService:
             business_rules=story.business_rules,
             acceptance_criteria=story.acceptance_criteria,
             story_points=story.story_points,
+            parent_key=module.jira_epic_key,
         )
         story.jira_issue_key = key
         story = await self.repository.update(story)

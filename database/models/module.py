@@ -28,6 +28,7 @@ class Module(BaseModel):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    jira_epic_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="modules", lazy="noload")
     stories: Mapped[list["Story"]] = relationship("Story", back_populates="module", lazy="noload")
