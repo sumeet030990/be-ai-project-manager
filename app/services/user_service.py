@@ -12,7 +12,15 @@ from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.project import ProjectResponse
-from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.schemas.user import (
+    JiraUserPreview,
+    JiraUserSyncFailure,
+    JiraUserSyncRequest,
+    JiraUserSyncResult,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
 
 
 class UserService:
@@ -106,3 +114,102 @@ class UserService:
         if not user:
             raise NotFoundException("User", str(user_id))
         await self.repository.delete(user)
+
+    # ── JIRA User Sync ───────────────────────────────────────────────────────
+
+    async def _get_jira_project_key(self, project_id: uuid.UUID) -> str:
+        project = await self.project_repository.get_by_id(project_id)
+        if not project:
+            raise NotFoundException("Project", str(project_id))
+        if not project.jira_project_key:
+            raise BadRequestException("This project has no JIRA project key configured.")
+        return project.jira_project_key
+
+    async def preview_jira_users(self, project_id: uuid.UUID) -> list[JiraUserPreview]:
+        from app.services.jira_service import JiraService
+
+        jira_project_key = await self._get_jira_project_key(project_id)
+        jira = JiraService()
+        jira_users = await jira.fetch_project_members(jira_project_key)
+
+        emails = [u.email for u in jira_users if u.email]
+        local_by_email = {u.email: u for u in await self.repository.get_by_emails(emails)}
+
+        previews: list[JiraUserPreview] = []
+        for ju in jira_users:
+            local = local_by_email.get(ju.email) if ju.email else None
+            if local and local.jira_account_id == ju.account_id:
+                match_status = "already_linked"
+                local_user_id = local.id
+            elif local:
+                match_status = "email_match"
+                local_user_id = local.id
+            else:
+                match_status = "new"
+                local_user_id = None
+            previews.append(JiraUserPreview(
+                account_id=ju.account_id,
+                display_name=ju.display_name,
+                email=ju.email,
+                avatar_url=ju.avatar_url,
+                active=ju.active,
+                match_status=match_status,
+                local_user_id=local_user_id,
+            ))
+        return previews
+
+    async def sync_users_from_jira(self, payload: JiraUserSyncRequest) -> JiraUserSyncResult:
+        import secrets
+        from app.services.jira_service import JiraService
+
+        jira_project_key = await self._get_jira_project_key(payload.project_id)
+
+        if not await self.role_repository.get_by_id(payload.role_id):
+            raise BadRequestException(f"Role '{payload.role_id}' does not exist.")
+
+        jira = JiraService()
+        jira_users = await jira.fetch_project_members(jira_project_key)
+        jira_map = {ju.account_id: ju for ju in jira_users}
+
+        selected = [jira_map[aid] for aid in payload.account_ids if aid in jira_map]
+
+        emails = [ju.email for ju in selected if ju.email]
+        local_by_email = {u.email: u for u in await self.repository.get_by_emails(emails)}
+
+        linked: list[UserResponse] = []
+        created: list[UserResponse] = []
+        failed: list[JiraUserSyncFailure] = []
+
+        for ju in selected:
+            try:
+                local = local_by_email.get(ju.email) if ju.email else None
+                if local:
+                    local.jira_account_id = ju.account_id
+                    user = await self.repository.update(local)
+                    linked.append(UserResponse.model_validate(user))
+                else:
+                    contact_placeholder = f"JIRA-{ju.account_id}"[:50]
+                    if await self.repository.get_by_contact_no(contact_placeholder):
+                        contact_placeholder = f"J-{ju.account_id}"[:50]
+                    name_parts = ju.display_name.split(" ", 1)
+                    first_name = name_parts[0] if name_parts else None
+                    last_name = name_parts[1] if len(name_parts) > 1 else None
+                    new_user = User(
+                        email=ju.email or f"{ju.account_id}@jira.local",
+                        contact_no=contact_placeholder,
+                        first_name=first_name,
+                        last_name=last_name,
+                        hashed_password=hash_password(secrets.token_urlsafe(16)),
+                        jira_account_id=ju.account_id,
+                        role_id=payload.role_id,
+                    )
+                    user = await self.repository.create(new_user)
+                    created.append(UserResponse.model_validate(user))
+            except Exception as exc:
+                failed.append(JiraUserSyncFailure(
+                    account_id=ju.account_id,
+                    display_name=ju.display_name,
+                    error=str(exc),
+                ))
+
+        return JiraUserSyncResult(linked=linked, created=created, failed=failed)

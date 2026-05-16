@@ -42,6 +42,18 @@ class JiraIssue:
     description: str | None
     status: str
     story_points: int | None
+    assignee_account_id: str | None = None
+    assignee_display_name: str | None = None
+    assignee_email: str | None = None
+
+
+@dataclass
+class JiraUser:
+    account_id: str
+    display_name: str
+    email: str | None
+    avatar_url: str | None
+    active: bool
 
 
 def _extract_adf_text(node: Any) -> str:
@@ -120,7 +132,7 @@ class JiraService:
 
         issues: list[JiraIssue] = []
         next_page_token: str | None = None
-        fields = ["summary", "description", "status", settings.JIRA_STORY_POINTS_FIELD]
+        fields = ["summary", "description", "status", settings.JIRA_STORY_POINTS_FIELD, "assignee"]
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             while True:
@@ -150,12 +162,16 @@ class JiraService:
                     description = _extract_adf_text(desc_node).strip() or None
                     sp_raw = f.get(settings.JIRA_STORY_POINTS_FIELD)
                     story_points = int(sp_raw) if sp_raw is not None else None
+                    assignee = f.get("assignee") or {}
                     issues.append(JiraIssue(
                         key=raw["key"],
                         title=f.get("summary", raw["key"]),
                         description=description,
                         status=_map_jira_status(f.get("status", {}).get("name", "")),
                         story_points=story_points,
+                        assignee_account_id=assignee.get("accountId") or None,
+                        assignee_display_name=assignee.get("displayName") or None,
+                        assignee_email=assignee.get("emailAddress") or None,
                     ))
 
                 next_page_token = body.get("nextPageToken")
@@ -272,3 +288,45 @@ class JiraService:
             )
             if response.is_error:
                 raise ServiceUnavailableException(f"JIRA update failed ({response.status_code}): {_extract_jira_error(response)}")
+
+    async def fetch_project_members(self, jira_project_key: str) -> list[JiraUser]:
+        if not jira_project_key:
+            raise ServiceUnavailableException("JIRA project key is not configured for this project.")
+
+        users: list[JiraUser] = []
+        seen: set[str] = set()
+        start_at = 0
+        max_results = 100
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while True:
+                response = await client.get(
+                    f"{self._base_url}/rest/api/3/user/assignable/search",
+                    headers=self._headers,
+                    params={"project": jira_project_key, "startAt": start_at, "maxResults": max_results},
+                )
+                if response.is_error:
+                    raise ServiceUnavailableException(
+                        f"JIRA members fetch failed ({response.status_code}): {_extract_jira_error(response)}"
+                    )
+                batch = response.json()
+                if not batch:
+                    break
+                for raw in batch:
+                    account_id = raw.get("accountId", "")
+                    if not account_id or account_id in seen:
+                        continue
+                    seen.add(account_id)
+                    avatar_urls = raw.get("avatarUrls", {})
+                    users.append(JiraUser(
+                        account_id=account_id,
+                        display_name=raw.get("displayName", ""),
+                        email=raw.get("emailAddress") or None,
+                        avatar_url=avatar_urls.get("48x48") or None,
+                        active=raw.get("active", True),
+                    ))
+                if len(batch) < max_results:
+                    break
+                start_at += max_results
+
+        return users

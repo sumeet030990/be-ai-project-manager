@@ -50,3 +50,13 @@ class UserRepository(BaseRepository[User]):
     async def get_by_contact_no(self, contact_no: str) -> User | None:
         result = await self.session.execute(select(User).where(User.contact_no == contact_no))
         return result.scalar_one_or_none()
+
+    async def get_by_jira_account_id(self, account_id: str) -> User | None:
+        result = await self.session.execute(select(User).where(User.jira_account_id == account_id))
+        return result.scalar_one_or_none()
+
+    async def get_by_emails(self, emails: list[str]) -> list[User]:
+        result = await self.session.execute(
+            self._base_query().where(User.email.in_(emails))
+        )
+        return list(result.scalars().all())

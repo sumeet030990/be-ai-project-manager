@@ -2,11 +2,22 @@ import uuid
 
 from fastapi import APIRouter
 
-from app.controllers import story_controller
+from app.controllers import story_controller, user_controller
 from app.core.dependencies import DBSession
 from app.schemas.story import JiraSyncResult, StoryResponse
+from app.schemas.user import JiraUserPreview, JiraUserSyncRequest, JiraUserSyncResult
 
 router = APIRouter(tags=["JIRA"])
+
+
+@router.get("/jira/users/preview", response_model=list[JiraUserPreview])
+async def preview_jira_users(project_id: uuid.UUID, db: DBSession):
+    return await user_controller.preview_jira_users(project_id=project_id, db=db)
+
+
+@router.post("/jira/users/sync", response_model=JiraUserSyncResult)
+async def sync_users_from_jira(payload: JiraUserSyncRequest, db: DBSession):
+    return await user_controller.sync_users_from_jira(payload=payload, db=db)
 
 
 @router.get("/jira/issue-types")

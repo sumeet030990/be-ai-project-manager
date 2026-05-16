@@ -34,6 +34,8 @@ class User(BaseModel):
     country: Mapped[str | None] = mapped_column(String(100), nullable=True)
     pincode: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    jira_account_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+
     role_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False
     )

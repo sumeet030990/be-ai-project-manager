@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.user import UserResponse
+
 StoryStatus = Literal["draft", "review", "approved", "rejected", "in_progress", "done"]
 
 
@@ -45,6 +47,15 @@ class StoryUpdate(BaseModel):
     urls: str | None = None
 
 
+class StoryAssigneeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    first_name: str | None
+    last_name: str | None
+    email: str
+
+
 class StoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,6 +70,8 @@ class StoryResponse(BaseModel):
     is_ai_generated: bool
     azure_work_item_id: int | None
     jira_issue_key: str | None
+    assignee_id: uuid.UUID | None
+    assignee: StoryAssigneeResponse | None
     business_rules: str | None
     acceptance_criteria: str | None
     file_references: str | None
@@ -76,7 +89,9 @@ class JiraSyncFailure(BaseModel):
 class JiraSyncResult(BaseModel):
     fetched: int
     imported: list[StoryResponse]
+    updated: list[StoryResponse]
     skipped: int
     failed: list[JiraSyncFailure]
+    users_linked: list[UserResponse] = []
 
 

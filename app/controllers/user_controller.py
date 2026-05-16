@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
 from app.schemas.project import ProjectResponse
-from app.schemas.user import UserCreate, UserResponse, UserUpdate
+from app.schemas.user import JiraUserPreview, JiraUserSyncRequest, JiraUserSyncResult, UserCreate, UserResponse, UserUpdate
 from app.services.user_service import UserService
 
 
@@ -33,3 +33,11 @@ async def list_user_projects(user_id: uuid.UUID, page: int, size: int, db: DBSes
 async def delete_user(user_id: uuid.UUID, db: DBSession) -> Response:
     await UserService(db).delete_user(user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def preview_jira_users(project_id: uuid.UUID, db: DBSession) -> list[JiraUserPreview]:
+    return await UserService(db).preview_jira_users(project_id)
+
+
+async def sync_users_from_jira(payload: JiraUserSyncRequest, db: DBSession) -> JiraUserSyncResult:
+    return await UserService(db).sync_users_from_jira(payload)

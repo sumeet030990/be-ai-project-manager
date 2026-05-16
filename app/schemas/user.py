@@ -1,5 +1,6 @@
 import uuid
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -62,5 +63,37 @@ class UserResponse(BaseModel):
     role: RoleResponse
     company_id: uuid.UUID | None
     company: CompanyResponse | None
+    jira_account_id: str | None
     created_at: datetime
     updated_at: datetime
+
+
+JiraMatchStatus = Literal["already_linked", "email_match", "new"]
+
+
+class JiraUserPreview(BaseModel):
+    account_id: str
+    display_name: str
+    email: str | None
+    avatar_url: str | None
+    active: bool
+    match_status: JiraMatchStatus
+    local_user_id: uuid.UUID | None
+
+
+class JiraUserSyncRequest(BaseModel):
+    project_id: uuid.UUID
+    account_ids: list[str]
+    role_id: uuid.UUID
+
+
+class JiraUserSyncFailure(BaseModel):
+    account_id: str
+    display_name: str
+    error: str
+
+
+class JiraUserSyncResult(BaseModel):
+    linked: list[UserResponse]
+    created: list[UserResponse]
+    failed: list[JiraUserSyncFailure]

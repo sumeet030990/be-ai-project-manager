@@ -257,13 +257,18 @@ class StoryService:
         existing_keys = await self.repository.get_existing_jira_keys()
 
         new_issues = [issue for issue in jira_issues if issue.key not in existing_keys]
-        skipped = len(jira_issues) - len(new_issues)
+        existing_issues = [issue for issue in jira_issues if issue.key in existing_keys]
+
+        # Build assignee map: link local users to their JIRA accounts for all issues
+        assignee_map, users_linked = await self._build_assignee_map(jira_issues)
 
         imported: list[StoryResponse] = []
+        updated: list[StoryResponse] = []
         failed: list[JiraSyncFailure] = []
 
         for order, issue in enumerate(new_issues):
             try:
+                user = assignee_map.get(issue.assignee_account_id) if issue.assignee_account_id else None
                 story = Story(
                     module_id=module_id,
                     title=issue.title,
@@ -272,13 +277,68 @@ class StoryService:
                     story_points=issue.story_points,
                     order=order,
                     jira_issue_key=issue.key,
+                    assignee_id=user.id if user else None,
                 )
                 story = await self.repository.create(story)
                 imported.append(StoryResponse.model_validate(story))
             except Exception as exc:
                 failed.append(JiraSyncFailure(jira_key=issue.key, title=issue.title, error=str(exc)))
 
-        return JiraSyncResult(fetched=len(jira_issues), imported=imported, skipped=skipped, failed=failed)
+        if existing_issues:
+            existing_issue_map = {issue.key: issue for issue in existing_issues}
+            stories_to_update = await self.repository.get_by_jira_keys(list(existing_issue_map.keys()))
+            for story in stories_to_update:
+                jira_issue = existing_issue_map[story.jira_issue_key]
+                story.status = jira_issue.status
+                story.story_points = jira_issue.story_points
+                user = assignee_map.get(jira_issue.assignee_account_id) if jira_issue.assignee_account_id else None
+                if user:
+                    story.assignee_id = user.id
+                try:
+                    story = await self.repository.update(story)
+                    updated.append(StoryResponse.model_validate(story))
+                except Exception as exc:
+                    failed.append(JiraSyncFailure(jira_key=story.jira_issue_key, title=story.title, error=str(exc)))
+
+        return JiraSyncResult(fetched=len(jira_issues), imported=imported, updated=updated, skipped=0, failed=failed, users_linked=users_linked)
+
+    async def _build_assignee_map(self, issues: list) -> tuple[dict, list]:
+        from app.schemas.user import UserResponse as UserResponseSchema
+        from app.repositories.user_repository import UserRepository
+        from database.models.user import User as UserModel
+
+        user_repo = UserRepository(self.repository.session)
+
+        # Collect unique assignees with both email and account_id
+        seen: set[str] = set()
+        assignees: list[tuple[str, str]] = []  # (email, account_id)
+        for issue in issues:
+            if issue.assignee_email and issue.assignee_account_id and issue.assignee_email not in seen:
+                seen.add(issue.assignee_email)
+                assignees.append((issue.assignee_email, issue.assignee_account_id))
+
+        if not assignees:
+            return {}, []
+
+        emails = [a[0] for a in assignees]
+        local_users = await user_repo.get_by_emails(emails)
+        email_to_user: dict[str, UserModel] = {u.email: u for u in local_users}
+
+        # Link jira_account_id where missing, build account_id → user map
+        account_id_to_user: dict[str, UserModel] = {}
+        users_linked: list = []
+
+        for email, account_id in assignees:
+            user = email_to_user.get(email)
+            if not user:
+                continue
+            if not user.jira_account_id:
+                user.jira_account_id = account_id
+                user = await user_repo.update(user)
+                users_linked.append(UserResponseSchema.model_validate(user))
+            account_id_to_user[account_id] = user
+
+        return account_id_to_user, users_linked
 
     async def pull_story_from_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
         from app.services.jira_service import JiraService
