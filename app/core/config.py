@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
     GROQ_API_KEY: str = ""
 
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    ENCRYPTION_KEY: str = ""
+
     JIRA_BASE_URL: str = ""
     JIRA_EMAIL: str = ""
     JIRA_API_KEY: str = ""

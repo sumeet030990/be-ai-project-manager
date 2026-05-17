@@ -1,22 +1,17 @@
-import json
 import math
-import re
 import uuid
 from typing import Any
 
-from groq import BadRequestError as GroqBadRequestError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.ai_client import get_ai_client
-from app.core.exceptions import NotFoundException, ServiceUnavailableException
+from app.core.ai_client import get_project_ai_client
+from app.core.exceptions import NotFoundException
 from app.repositories.module_repository import ModuleRepository
 from app.repositories.story_repository import StoryRepository
 from app.repositories.test_case_repository import TestCaseRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.test_case import TestCaseCreate, TestCaseGenerateRequest, TestCaseResponse, TestCaseUpdate
 from database.models.test_case import TestCase
-
-_GROQ_MODEL = "llama-3.3-70b-versatile"
 
 _GENERATE_TEST_CASES_TOOL: Any = {
     "type": "function",
@@ -64,64 +59,6 @@ _GENERATE_TEST_CASES_TOOL: Any = {
 }
 
 
-async def _call_generate_test_cases_ai(story_context: str, manager_note: str) -> list[dict]:
-    """
-    Call Groq with tool-calling to generate test cases.
-    Handles the case where llama-3.3-70b falls back to a tag-based XML format
-    (<function=save_test_cases>[...]</function>) instead of standard JSON tool calls.
-    """
-    try:
-        response = await get_ai_client().chat.completions.create(
-            model=_GROQ_MODEL,
-            max_tokens=4096,
-            tools=[_GENERATE_TEST_CASES_TOOL],
-            tool_choice={"type": "function", "function": {"name": "save_test_cases"}},
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a senior QA engineer who writes thorough, precise test cases. "
-                        "For every story you receive, generate a balanced set of positive (happy path) "
-                        "and negative (error path, edge case, invalid input) test cases. "
-                        "Each test case must have clear numbered steps and a concrete expected result. "
-                        "Positive tests verify the feature works as expected with valid inputs. "
-                        "Negative tests verify the system handles invalid inputs, missing data, "
-                        "boundary conditions, and error states gracefully."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"{story_context}\n"
-                        f"{manager_note}"
-                        "Generate comprehensive test cases covering:\n"
-                        "- All acceptance criteria (positive scenarios)\n"
-                        "- Business rule violations (negative scenarios)\n"
-                        "- Boundary / edge cases (negative scenarios)\n"
-                        "- Missing or invalid input handling (negative scenarios)\n"
-                        "Order positive tests before negative tests. "
-                        "Aim for at least 3 positive and 3 negative test cases."
-                    ),
-                },
-            ],
-        )
-        tool_calls = response.choices[0].message.tool_calls
-        if not tool_calls:
-            raise ServiceUnavailableException("AI did not return a structured response. Please try again.")
-        return json.loads(tool_calls[0].function.arguments)["test_cases"]
-
-    except GroqBadRequestError as exc:
-        # llama-3.3-70b sometimes emits <function=name>[...]</function> instead of JSON tool calls.
-        # Parse the failed_generation field to recover the generated test cases.
-        try:
-            body = exc.response.json()
-            failed_gen: str = body.get("error", {}).get("failed_generation", "")
-            match = re.search(r"<function=\w+>(.*?)</function>", failed_gen, re.DOTALL)
-            if not match:
-                raise ServiceUnavailableException("AI generation failed. Please try again.")
-            return json.loads(match.group(1))
-        except (ValueError, AttributeError):
-            raise ServiceUnavailableException("AI generation failed. Please try again.")
 
 
 class TestCaseService:
@@ -196,6 +133,7 @@ class TestCaseService:
         self, module_id: uuid.UUID, story_id: uuid.UUID, payload: TestCaseGenerateRequest
     ) -> list[TestCaseResponse]:
         story = await self._get_story_or_404(module_id, story_id)
+        module = await self.module_repository.get_by_id(module_id)
 
         story_context = (
             f"Story: {story.title}\n"
@@ -212,7 +150,41 @@ class TestCaseService:
             else ""
         )
 
-        raw: list[dict] = await _call_generate_test_cases_ai(story_context, manager_note)
+        config_id = uuid.UUID(payload.config_id) if payload.config_id else None
+        ai_client = await get_project_ai_client(module.project_id, self.module_repository.session, config_id=config_id)
+        result = await ai_client.chat_with_tools(
+            tools=[_GENERATE_TEST_CASES_TOOL],
+            tool_choice={"type": "function", "function": {"name": "save_test_cases"}},
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a senior QA engineer who writes thorough, precise test cases. "
+                        "For every story you receive, generate a balanced set of positive (happy path) "
+                        "and negative (error path, edge case, invalid input) test cases. "
+                        "Each test case must have clear numbered steps and a concrete expected result. "
+                        "Positive tests verify the feature works as expected with valid inputs. "
+                        "Negative tests verify the system handles invalid inputs, missing data, "
+                        "boundary conditions, and error states gracefully."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"{story_context}\n"
+                        f"{manager_note}"
+                        "Generate comprehensive test cases covering:\n"
+                        "- All acceptance criteria (positive scenarios)\n"
+                        "- Business rule violations (negative scenarios)\n"
+                        "- Boundary / edge cases (negative scenarios)\n"
+                        "- Missing or invalid input handling (negative scenarios)\n"
+                        "Order positive tests before negative tests. "
+                        "Aim for at least 3 positive and 3 negative test cases."
+                    ),
+                },
+            ],
+        )
+        raw: list[dict] = result.arguments["test_cases"]
 
         test_cases = await self.repository.bulk_create([
             TestCase(

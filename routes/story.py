@@ -57,4 +57,10 @@ async def delete_story(
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_stories(project_id: uuid.UUID, module_id: uuid.UUID, db: DBSession, payload: StoryGenerateRequest | None = None):
-    return await story_controller.generate_stories(project_id=project_id, module_id=module_id, db=db, context=payload.context if payload else None)
+    return await story_controller.generate_stories(
+        project_id=project_id,
+        module_id=module_id,
+        db=db,
+        context=payload.context if payload else None,
+        config_id=payload.config_id if payload else None,
+    )

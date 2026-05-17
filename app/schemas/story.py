@@ -20,10 +20,12 @@ class StoryCreate(BaseModel):
 
 class StoryGenerateRequest(BaseModel):
     context: str | None = None
+    config_id: str | None = None
 
 
 class StoryRefineRequest(BaseModel):
     context: str | None = None
+    config_id: str | None = None
 
 
 class StoryRefineResponse(BaseModel):

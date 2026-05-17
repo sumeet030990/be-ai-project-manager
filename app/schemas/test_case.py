@@ -27,6 +27,7 @@ class TestCaseUpdate(BaseModel):
 
 class TestCaseGenerateRequest(BaseModel):
     context: str | None = None
+    config_id: str | None = None
 
 
 class TestCaseResponse(BaseModel):

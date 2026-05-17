@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.ai_client import get_ai_client
+from app.core.ai_client import get_project_ai_client
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException
 from app.repositories.module_repository import ModuleRepository
 from app.repositories.project_plugin_repository import ProjectPluginRepository
@@ -15,8 +15,6 @@ from app.repositories.story_repository import StoryRepository
 from app.schemas.common import PaginatedResponse
 from app.schemas.story import JiraSyncFailure, JiraSyncResult, StoryCreate, StoryRefineRequest, StoryRefineResponse, StoryResponse, StoryUpdate
 from database.models.story import Story
-
-_GROQ_MODEL = "llama-3.3-70b-versatile"
 
 _GENERATE_STORIES_TOOL: Any = {
     "type": "function",
@@ -200,9 +198,9 @@ class StoryService:
             "No additional instructions — generate full details from scratch.\n\n"
         )
 
-        response = await get_ai_client().chat.completions.create(
-            model=_GROQ_MODEL,
-            max_tokens=4096,
+        config_id = uuid.UUID(payload.config_id) if payload.config_id else None
+        ai_client = await get_project_ai_client(module.project_id, self.repository.session, config_id=config_id)
+        result = await ai_client.chat_with_tools(
             tools=[_REFINE_STORY_TOOL],
             tool_choice={"type": "function", "function": {"name": "refine_story"}},
             messages=[
@@ -234,11 +232,7 @@ class StoryService:
             ],
         )
 
-        tool_calls = response.choices[0].message.tool_calls
-        if not tool_calls:
-            raise ServiceUnavailableException("AI did not return a structured response. Please try again.")
-
-        refined = StoryRefineResponse(**json.loads(tool_calls[0].function.arguments))
+        refined = StoryRefineResponse(**result.arguments)
         for field, value in refined.model_dump().items():
             setattr(story, field, value)
         story = await self.repository.update(story)
@@ -427,7 +421,7 @@ class StoryService:
 
     # ── AI Generation ─────────────────────────────────────────────────────────
 
-    async def generate_stories(self, project_id: uuid.UUID, module_id: uuid.UUID, context: str | None = None) -> list[StoryResponse]:
+    async def generate_stories(self, project_id: uuid.UUID, module_id: uuid.UUID, context: str | None = None, config_id: uuid.UUID | None = None) -> list[StoryResponse]:
         module = await self.module_repository.get_by_project_and_id(project_id, module_id)
         if not module:
             raise NotFoundException("Module", str(module_id))
@@ -436,9 +430,8 @@ class StoryService:
         plugins, _ = await self.plugin_repository.get_all_by_project(project_id, skip=0, limit=500)
         tech_context = _build_tech_context(tech_stacks, plugins)
 
-        response = await get_ai_client().chat.completions.create(
-            model=_GROQ_MODEL,
-            max_tokens=4096,
+        ai_client = await get_project_ai_client(project_id, self.repository.session, config_id=config_id)
+        result = await ai_client.chat_with_tools(
             tools=[_GENERATE_STORIES_TOOL],
             tool_choice={"type": "function", "function": {"name": "save_stories"}},
             messages=[
@@ -477,10 +470,7 @@ class StoryService:
             ],
         )
 
-        tool_calls = response.choices[0].message.tool_calls
-        if not tool_calls:
-            raise ServiceUnavailableException("AI did not return a structured response. Please try again.")
-        raw_stories: list[dict] = json.loads(tool_calls[0].function.arguments)["stories"]
+        raw_stories: list[dict] = result.arguments["stories"]
 
         stories = await self.repository.bulk_create([
             Story(
