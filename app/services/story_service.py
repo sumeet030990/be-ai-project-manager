@@ -282,6 +282,8 @@ class StoryService:
             existing_issue_map = {issue.key: issue for issue in existing_issues}
             stories_to_update = await self.repository.get_by_jira_keys(list(existing_issue_map.keys()))
             for story in stories_to_update:
+                if not story.jira_issue_key:
+                    continue
                 jira_issue = existing_issue_map[story.jira_issue_key]
                 story.status = jira_issue.status
                 story.story_points = jira_issue.story_points
@@ -292,7 +294,7 @@ class StoryService:
                     story = await self.repository.update(story)
                     updated.append(StoryResponse.model_validate(story))
                 except Exception as exc:
-                    failed.append(JiraSyncFailure(jira_key=story.jira_issue_key, title=story.title, error=str(exc)))
+                    failed.append(JiraSyncFailure(jira_key=story.jira_issue_key or "", title=story.title, error=str(exc)))
 
         return JiraSyncResult(fetched=len(jira_issues), imported=imported, updated=updated, skipped=0, failed=failed, users_linked=users_linked)
 
