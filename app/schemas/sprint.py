@@ -99,6 +99,7 @@ class SprintAIPlanRequest(BaseModel):
     capacity: int = Field(..., ge=1, description="Sprint capacity in story points")
     context: str | None = None
     config_id: str | None = None
+    module_ids: list[uuid.UUID] | None = None
 
 
 class SprintAIPlanResult(BaseModel):

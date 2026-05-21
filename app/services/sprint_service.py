@@ -324,7 +324,7 @@ class SprintService:
 
         stories = await self.repository.get_stories_in_sprint(sprint_id)
         jira_keys = [s.jira_issue_key for s in stories if s.jira_issue_key]
-        if jira_keys:
+        if jira_keys and sprint.jira_sprint_id:
             await jira.add_issues_to_sprint(sprint.jira_sprint_id, jira_keys)
 
         return SprintResponse.model_validate(sprint)
@@ -333,16 +333,50 @@ class SprintService:
 
     async def ai_plan_sprint(self, project_id: uuid.UUID, sprint_id: uuid.UUID, payload: SprintAIPlanRequest) -> SprintAIPlanResult:
         sprint = await self._get_sprint_or_404(project_id, sprint_id)
-        backlog_stories = await self.repository.get_backlog_stories(project_id)
+        all_backlog_stories = await self.repository.get_backlog_stories(project_id)
 
-        if not backlog_stories:
+        if not all_backlog_stories:
             raise BadRequestException("No backlog stories available for AI planning.")
 
-        story_list_text = "\n".join(
-            f"- ID: {s.id} | [{s.story_points or '?'} pts] {s.title}"
-            + (f"\n  Description: {s.description[:120]}..." if s.description and len(s.description) > 120 else f"\n  Description: {s.description or 'N/A'}")
-            for s in backlog_stories
-        )
+        # Filter to selected modules when specified; keep all stories as context
+        if payload.module_ids:
+            module_id_set = set(payload.module_ids)
+            focused_stories = [s for s in all_backlog_stories if s.module_id in module_id_set]
+            other_stories = [s for s in all_backlog_stories if s.module_id not in module_id_set]
+        else:
+            focused_stories = all_backlog_stories
+            other_stories = []
+
+        if not focused_stories:
+            raise BadRequestException("No backlog stories found in the selected modules.")
+
+        def _story_line(s) -> str:
+            desc = s.description or "N/A"
+            if len(desc) > 120:
+                desc = desc[:120] + "..."
+            module_name = s.module.name if s.module else "Unknown"
+            return f"- ID: {s.id} | [{s.story_points or '?'} pts] [{module_name}] {s.title}\n  Description: {desc}"
+
+        focused_text = "\n".join(_story_line(s) for s in focused_stories)
+
+        module_focus_note = ""
+        if payload.module_ids:
+            focused_module_names = list({s.module.name for s in focused_stories if s.module})
+            module_focus_note = (
+                f"IMPORTANT: The user wants to focus this sprint on the following module(s): "
+                f"{', '.join(focused_module_names)}. "
+                "Prioritize stories from these modules. "
+            )
+            if other_stories:
+                other_text = "\n".join(_story_line(s) for s in other_stories)
+                story_list_section = (
+                    f"Focused module stories (prioritize these):\n{focused_text}\n\n"
+                    f"Other backlog stories (include only if capacity allows and they complement the focus):\n{other_text}"
+                )
+            else:
+                story_list_section = f"Available backlog stories:\n{focused_text}"
+        else:
+            story_list_section = f"Available backlog stories:\n{focused_text}"
 
         config_id = uuid.UUID(payload.config_id) if payload.config_id else None
         ai_client = await get_project_ai_client(project_id, self.repository.session, config_id=config_id)
@@ -357,7 +391,8 @@ class SprintService:
                         "You are an expert agile project manager helping plan a sprint. "
                         "Your job is to select the most valuable and coherent set of stories from the backlog "
                         "that fits within the sprint capacity without exceeding it. "
-                        "Prioritize stories with higher story point values that form a complete feature, "
+                        + module_focus_note
+                        + "Prioritize stories with higher story point values that form a complete feature, "
                         "and prefer lower-numbered IDs when story priority is equal."
                     ),
                 },
@@ -368,7 +403,7 @@ class SprintService:
                         f"Sprint goal: {sprint.goal or 'No specific goal set.'}\n"
                         f"Sprint capacity: {payload.capacity} story points\n\n"
                         + (f"Additional context: {payload.context}\n\n" if payload.context else "")
-                        + f"Available backlog stories:\n{story_list_text}\n\n"
+                        + f"{story_list_section}\n\n"
                         "Select stories that:\n"
                         "1. Together do NOT exceed the capacity\n"
                         "2. Are aligned with the sprint goal\n"
@@ -383,7 +418,7 @@ class SprintService:
         selected_ids_raw: list[str] = result.arguments.get("selected_story_ids", [])
         reasoning: str = result.arguments.get("reasoning", "")
 
-        id_to_story = {str(s.id): s for s in backlog_stories}
+        id_to_story = {str(s.id): s for s in all_backlog_stories}
         selected_stories = [
             id_to_story[sid] for sid in selected_ids_raw if sid in id_to_story
         ]
