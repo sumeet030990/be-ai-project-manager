@@ -310,6 +310,142 @@ class JiraService:
             if response.is_error:
                 raise ServiceUnavailableException(f"JIRA update failed ({response.status_code}): {_extract_jira_error(response)}")
 
+    # ── Agile / Sprint API ────────────────────────────────────────────────────
+
+    async def fetch_sprints(self, board_id: int, state: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"startAt": 0, "maxResults": 50}
+        if state:
+            params["state"] = state
+
+        sprints: list[dict[str, Any]] = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while True:
+                response = await client.get(
+                    f"{self._base_url}/rest/agile/1.0/board/{board_id}/sprint",
+                    headers=self._headers,
+                    params=params,
+                )
+                if response.is_error:
+                    raise ServiceUnavailableException(
+                        f"JIRA sprints fetch failed ({response.status_code}): {_extract_jira_error(response)}"
+                    )
+                body = response.json()
+                batch = body.get("values", [])
+                sprints.extend(batch)
+                if body.get("isLast", True) or not batch:
+                    break
+                params["startAt"] += len(batch)
+        return sprints
+
+    async def fetch_sprint_issues(self, sprint_id: int) -> list[JiraIssue]:
+        issues: list[JiraIssue] = []
+        start_at = 0
+        fields = ["summary", "description", "status", settings.JIRA_STORY_POINTS_FIELD, "assignee"]
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while True:
+                response = await client.get(
+                    f"{self._base_url}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                    headers=self._headers,
+                    params={"startAt": start_at, "maxResults": 100, "fields": ",".join(fields)},
+                )
+                if response.is_error:
+                    raise ServiceUnavailableException(
+                        f"JIRA sprint issues fetch failed ({response.status_code}): {_extract_jira_error(response)}"
+                    )
+                body = response.json()
+                batch = body.get("issues", [])
+                for raw in batch:
+                    f = raw.get("fields", {})
+                    desc_node = f.get("description")
+                    description = _extract_adf_text(desc_node).strip() or None
+                    sp_raw = f.get(settings.JIRA_STORY_POINTS_FIELD)
+                    story_points = int(sp_raw) if sp_raw is not None else None
+                    assignee = f.get("assignee") or {}
+                    issues.append(JiraIssue(
+                        key=raw["key"],
+                        title=f.get("summary", raw["key"]),
+                        description=description,
+                        status=_map_jira_status(f.get("status", {}).get("name", "")),
+                        story_points=story_points,
+                        assignee_account_id=assignee.get("accountId") or None,
+                        assignee_display_name=assignee.get("displayName") or None,
+                        assignee_email=assignee.get("emailAddress") or None,
+                    ))
+                if body.get("total", 0) <= start_at + len(batch):
+                    break
+                start_at += len(batch)
+        return issues
+
+    async def create_sprint(
+        self,
+        board_id: int,
+        name: str,
+        goal: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> int:
+        payload: dict[str, Any] = {"name": name, "originBoardId": board_id}
+        if goal:
+            payload["goal"] = goal
+        if start_date:
+            payload["startDate"] = start_date
+        if end_date:
+            payload["endDate"] = end_date
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base_url}/rest/agile/1.0/sprint",
+                headers=self._headers,
+                json=payload,
+            )
+            if response.is_error:
+                raise ServiceUnavailableException(
+                    f"JIRA sprint create failed ({response.status_code}): {_extract_jira_error(response)}"
+                )
+        return response.json()["id"]
+
+    async def update_sprint_status(self, sprint_id: int, state: str) -> None:
+        """state: 'active' | 'closed'"""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base_url}/rest/agile/1.0/sprint/{sprint_id}",
+                headers=self._headers,
+                json={"state": state},
+            )
+            if response.is_error:
+                raise ServiceUnavailableException(
+                    f"JIRA sprint update failed ({response.status_code}): {_extract_jira_error(response)}"
+                )
+
+    async def add_issues_to_sprint(self, sprint_id: int, issue_keys: list[str]) -> None:
+        if not issue_keys:
+            return
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{self._base_url}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                headers=self._headers,
+                json={"issues": issue_keys},
+            )
+            if response.is_error:
+                raise ServiceUnavailableException(
+                    f"JIRA add to sprint failed ({response.status_code}): {_extract_jira_error(response)}"
+                )
+
+    async def remove_issues_from_sprint(self, sprint_id: int, issue_keys: list[str]) -> None:
+        if not issue_keys:
+            return
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(
+                f"{self._base_url}/rest/agile/1.0/sprint/{sprint_id}/issue",
+                headers=self._headers,
+                json={"issues": issue_keys},
+            )
+            if response.is_error:
+                raise ServiceUnavailableException(
+                    f"JIRA remove from sprint failed ({response.status_code}): {_extract_jira_error(response)}"
+                )
+
     async def fetch_project_members(self, jira_project_key: str) -> list[JiraUser]:
         if not jira_project_key:
             raise ServiceUnavailableException("JIRA project key is not configured for this project.")

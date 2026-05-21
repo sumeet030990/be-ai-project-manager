@@ -9,6 +9,7 @@ class ProjectCreate(BaseModel):
     description: str | None = None
     project_info: str | None = None
     jira_project_key: str | None = Field(default=None, max_length=50)
+    jira_board_id: int | None = None
     company_id: uuid.UUID
     created_by: uuid.UUID
 
@@ -18,6 +19,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     project_info: str | None = None
     jira_project_key: str | None = Field(default=None, max_length=50)
+    jira_board_id: int | None = None
     status: str | None = Field(default=None, min_length=1, max_length=50)
     is_active: bool | None = None
 
@@ -34,6 +36,7 @@ class ProjectResponse(BaseModel):
     description: str | None
     project_info: str | None
     jira_project_key: str | None
+    jira_board_id: int | None
     status: str
     is_active: bool
     company_id: uuid.UUID
