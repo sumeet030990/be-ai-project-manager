@@ -49,15 +49,15 @@ class SprintStoriesRequest(BaseModel):
 
 # ── Backlog view ──────────────────────────────────────────────────────────────
 
-class BacklogModuleGroup(BaseModel):
-    module_id: uuid.UUID
-    module_name: str
+class BacklogFeatureGroup(BaseModel):
+    feature_id: uuid.UUID
+    feature_name: str
     jira_epic_key: str | None
     stories: list[StoryResponse]
 
 
 class BacklogResponse(BaseModel):
-    modules: list[BacklogModuleGroup]
+    features: list[BacklogFeatureGroup]
     total_stories: int
     total_points: int
 
@@ -99,7 +99,7 @@ class SprintAIPlanRequest(BaseModel):
     capacity: int = Field(..., ge=1, description="Sprint capacity in story points")
     context: str | None = None
     config_id: str | None = None
-    module_ids: list[uuid.UUID] | None = None
+    feature_ids: list[uuid.UUID] | None = None
 
 
 class SprintAIPlanResult(BaseModel):

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.repositories.base import BaseRepository
-from database.models.module import Module
+from database.models.feature import Feature
 from database.models.sprint import Sprint
 from database.models.sprint_story import SprintStory
 from database.models.story import Story
@@ -89,12 +89,12 @@ class SprintRepository(BaseRepository[Sprint]):
         )
         return list(result.scalars().all())
 
-    async def get_stories_in_sprint_with_module(self, sprint_id: uuid.UUID) -> list[Story]:
+    async def get_stories_in_sprint_with_feature(self, sprint_id: uuid.UUID) -> list[Story]:
         story_ids_subq = select(SprintStory.story_id).where(SprintStory.sprint_id == sprint_id)
         result = await self.session.execute(
             select(Story)
             .where(Story.id.in_(story_ids_subq))
-            .options(selectinload(Story.assignee), selectinload(Story.module))
+            .options(selectinload(Story.assignee), selectinload(Story.feature))
             .order_by(Story.priority, Story.order)
         )
         return list(result.scalars().all())
@@ -102,17 +102,17 @@ class SprintRepository(BaseRepository[Sprint]):
     # ── Backlog ───────────────────────────────────────────────────────────────
 
     async def get_backlog_stories(self, project_id: uuid.UUID) -> list[Story]:
-        """Stories belonging to project modules that are not assigned to any sprint."""
+        """Stories belonging to project features that are not assigned to any sprint."""
         all_sprint_story_ids_subq = select(SprintStory.story_id)
-        module_ids_subq = select(Module.id).where(Module.project_id == project_id)
+        feature_ids_subq = select(Feature.id).where(Feature.project_id == project_id)
 
         result = await self.session.execute(
             select(Story)
             .where(
-                Story.module_id.in_(module_ids_subq),
+                Story.feature_id.in_(feature_ids_subq),
                 ~Story.id.in_(all_sprint_story_ids_subq),
             )
-            .options(selectinload(Story.assignee), selectinload(Story.module))
+            .options(selectinload(Story.assignee), selectinload(Story.feature))
             .order_by(Story.priority, Story.order)
         )
         return list(result.scalars().all())

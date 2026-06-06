@@ -32,16 +32,16 @@ class StoryRepository(BaseRepository[Story]):
         await self.session.flush()
         return await self._get_by_id_with_assignee(instance.id)
 
-    async def get_all_by_module(self, module_id: uuid.UUID, skip: int, limit: int) -> tuple[list[Story], int]:
+    async def get_all_by_feature(self, feature_id: uuid.UUID, skip: int, limit: int) -> tuple[list[Story], int]:
         count_result = await self.session.execute(
-            select(func.count()).select_from(Story).where(Story.module_id == module_id)
+            select(func.count()).select_from(Story).where(Story.feature_id == feature_id)
         )
         total = count_result.scalar_one()
 
         result = await self.session.execute(
             self._with_assignee(
                 select(Story)
-                .where(Story.module_id == module_id)
+                .where(Story.feature_id == feature_id)
                 .order_by(Story.priority, Story.order)
                 .offset(skip)
                 .limit(limit)
@@ -49,17 +49,17 @@ class StoryRepository(BaseRepository[Story]):
         )
         return list(result.scalars().all()), total
 
-    async def get_by_module_and_id(self, module_id: uuid.UUID, story_id: uuid.UUID) -> Story | None:
+    async def get_by_feature_and_id(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> Story | None:
         result = await self.session.execute(
             self._with_assignee(
-                select(Story).where(Story.module_id == module_id, Story.id == story_id)
+                select(Story).where(Story.feature_id == feature_id, Story.id == story_id)
             )
         )
         return result.scalar_one_or_none()
 
-    async def get_jira_linked_stories_by_module(self, module_id: uuid.UUID) -> list[Story]:
+    async def get_jira_linked_stories_by_feature(self, feature_id: uuid.UUID) -> list[Story]:
         result = await self.session.execute(
-            select(Story).where(Story.module_id == module_id, Story.jira_issue_key.isnot(None))
+            select(Story).where(Story.feature_id == feature_id, Story.jira_issue_key.isnot(None))
         )
         return list(result.scalars().all())
 

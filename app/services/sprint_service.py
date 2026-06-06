@@ -11,7 +11,7 @@ from app.repositories.sprint_repository import SprintRepository
 from app.repositories.story_repository import StoryRepository
 from app.schemas.sprint import (
     ActiveSprintResponse,
-    BacklogModuleGroup,
+    BacklogFeatureGroup,
     BacklogResponse,
     SprintAIPlanRequest,
     SprintAIPlanResult,
@@ -154,23 +154,23 @@ class SprintService:
         await self._get_project_or_404(project_id)
         stories = await self.repository.get_backlog_stories(project_id)
 
-        groups: dict[uuid.UUID, BacklogModuleGroup] = {}
+        groups: dict[uuid.UUID, BacklogFeatureGroup] = {}
         total_points = 0
 
         for story in stories:
-            mid = story.module_id
-            if mid not in groups:
-                groups[mid] = BacklogModuleGroup(
-                    module_id=mid,
-                    module_name=story.module.name if story.module else "",
-                    jira_epic_key=story.module.jira_epic_key if story.module else None,
+            fid = story.feature_id
+            if fid not in groups:
+                groups[fid] = BacklogFeatureGroup(
+                    feature_id=fid,
+                    feature_name=story.feature.name if story.feature else "",
+                    jira_epic_key=story.feature.jira_epic_key if story.feature else None,
                     stories=[],
                 )
-            groups[mid].stories.append(StoryResponse.model_validate(story))
+            groups[fid].stories.append(StoryResponse.model_validate(story))
             total_points += story.story_points or 0
 
         return BacklogResponse(
-            modules=list(groups.values()),
+            features=list(groups.values()),
             total_stories=len(stories),
             total_points=total_points,
         )
@@ -338,39 +338,39 @@ class SprintService:
         if not all_backlog_stories:
             raise BadRequestException("No backlog stories available for AI planning.")
 
-        # Filter to selected modules when specified; keep all stories as context
-        if payload.module_ids:
-            module_id_set = set(payload.module_ids)
-            focused_stories = [s for s in all_backlog_stories if s.module_id in module_id_set]
-            other_stories = [s for s in all_backlog_stories if s.module_id not in module_id_set]
+        # Filter to selected features when specified; keep all stories as context
+        if payload.feature_ids:
+            feature_id_set = set(payload.feature_ids)
+            focused_stories = [s for s in all_backlog_stories if s.feature_id in feature_id_set]
+            other_stories = [s for s in all_backlog_stories if s.feature_id not in feature_id_set]
         else:
             focused_stories = all_backlog_stories
             other_stories = []
 
         if not focused_stories:
-            raise BadRequestException("No backlog stories found in the selected modules.")
+            raise BadRequestException("No backlog stories found in the selected features.")
 
         def _story_line(s) -> str:
             desc = s.description or "N/A"
             if len(desc) > 120:
                 desc = desc[:120] + "..."
-            module_name = s.module.name if s.module else "Unknown"
-            return f"- ID: {s.id} | [{s.story_points or '?'} pts] [{module_name}] {s.title}\n  Description: {desc}"
+            feature_name = s.feature.name if s.feature else "Unknown"
+            return f"- ID: {s.id} | [{s.story_points or '?'} pts] [{feature_name}] {s.title}\n  Description: {desc}"
 
         focused_text = "\n".join(_story_line(s) for s in focused_stories)
 
-        module_focus_note = ""
-        if payload.module_ids:
-            focused_module_names = list({s.module.name for s in focused_stories if s.module})
-            module_focus_note = (
-                f"IMPORTANT: The user wants to focus this sprint on the following module(s): "
-                f"{', '.join(focused_module_names)}. "
-                "Prioritize stories from these modules. "
+        feature_focus_note = ""
+        if payload.feature_ids:
+            focused_feature_names = list({s.feature.name for s in focused_stories if s.feature})
+            feature_focus_note = (
+                f"IMPORTANT: The user wants to focus this sprint on the following feature(s): "
+                f"{', '.join(focused_feature_names)}. "
+                "Prioritize stories from these features. "
             )
             if other_stories:
                 other_text = "\n".join(_story_line(s) for s in other_stories)
                 story_list_section = (
-                    f"Focused module stories (prioritize these):\n{focused_text}\n\n"
+                    f"Focused feature stories (prioritize these):\n{focused_text}\n\n"
                     f"Other backlog stories (include only if capacity allows and they complement the focus):\n{other_text}"
                 )
             else:
@@ -391,7 +391,7 @@ class SprintService:
                         "You are an expert agile project manager helping plan a sprint. "
                         "Your job is to select the most valuable and coherent set of stories from the backlog "
                         "that fits within the sprint capacity without exceeding it. "
-                        + module_focus_note
+                        + feature_focus_note
                         + "Prioritize stories with higher story point values that form a complete feature, "
                         "and prefer lower-numbered IDs when story priority is equal."
                     ),

@@ -14,8 +14,8 @@ if TYPE_CHECKING:
     from database.models.story import Story
 
 
-class Module(BaseModel):
-    __tablename__ = "modules"
+class Feature(BaseModel):
+    __tablename__ = "features"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
@@ -30,10 +30,10 @@ class Module(BaseModel):
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     jira_epic_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    project: Mapped["Project"] = relationship("Project", back_populates="modules", lazy="noload")
-    stories: Mapped[list["Story"]] = relationship("Story", back_populates="module", lazy="noload")
+    project: Mapped["Project"] = relationship("Project", back_populates="features", lazy="noload")
+    stories: Mapped[list["Story"]] = relationship("Story", back_populates="feature", lazy="noload")
 
     __table_args__ = (
-        Index("ix_modules_project_id", "project_id"),
-        Index("ix_modules_status", "status"),
+        Index("ix_features_project_id", "project_id"),
+        Index("ix_features_status", "status"),
     )

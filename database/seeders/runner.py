@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from app.core.database import AsyncSessionFactory
-import database.models.module  # noqa: F401
+import database.models.feature  # noqa: F401
 import database.models.story  # noqa: F401
 import database.models.project_tech_stack  # noqa: F401
 import database.models.project_plugin  # noqa: F401

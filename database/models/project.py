@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from database.models.project_user import ProjectUser
     from database.models.project_tech_stack import ProjectTechStack
     from database.models.project_plugin import ProjectPlugin
-    from database.models.module import Module
+    from database.models.feature import Feature
 
 
 class Project(BaseModel):
@@ -41,7 +41,7 @@ class Project(BaseModel):
     project_users: Mapped[list["ProjectUser"]] = relationship("ProjectUser", back_populates="project", lazy="noload")
     tech_stacks: Mapped[list["ProjectTechStack"]] = relationship("ProjectTechStack", back_populates="project", lazy="noload")
     plugins: Mapped[list["ProjectPlugin"]] = relationship("ProjectPlugin", back_populates="project", lazy="noload")
-    modules: Mapped[list["Module"]] = relationship("Module", back_populates="project", lazy="noload")
+    features: Mapped[list["Feature"]] = relationship("Feature", back_populates="project", lazy="noload")
 
     __table_args__ = (
         Index("ix_projects_name", "name"),

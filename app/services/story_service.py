@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_client import get_project_ai_client
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException
-from app.repositories.module_repository import ModuleRepository
+from app.repositories.feature_repository import FeatureRepository
 from app.repositories.project_plugin_repository import ProjectPluginRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.project_tech_stack_repository import ProjectTechStackRepository
@@ -20,7 +20,7 @@ _GENERATE_STORIES_TOOL: Any = {
     "type": "function",
     "function": {
         "name": "save_stories",
-        "description": "Save the generated stories for the module.",
+        "description": "Save the generated stories for the feature.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -104,19 +104,19 @@ def _build_tech_context(tech_stacks: list, plugins: list) -> str:
 class StoryService:
     def __init__(self, session: AsyncSession):
         self.repository = StoryRepository(session)
-        self.module_repository = ModuleRepository(session)
+        self.feature_repository = FeatureRepository(session)
         self.project_repository = ProjectRepository(session)
         self.tech_stack_repository = ProjectTechStackRepository(session)
         self.plugin_repository = ProjectPluginRepository(session)
 
-    async def _get_module_or_404(self, module_id: uuid.UUID):
-        module = await self.module_repository.get_by_id(module_id)
-        if not module:
-            raise NotFoundException("Module", str(module_id))
-        return module
+    async def _get_feature_or_404(self, feature_id: uuid.UUID):
+        feature = await self.feature_repository.get_by_id(feature_id)
+        if not feature:
+            raise NotFoundException("Feature", str(feature_id))
+        return feature
 
-    async def _get_story_or_404(self, module_id: uuid.UUID, story_id: uuid.UUID) -> Story:
-        story = await self.repository.get_by_module_and_id(module_id, story_id)
+    async def _get_story_or_404(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> Story:
+        story = await self.repository.get_by_feature_and_id(feature_id, story_id)
         if not story:
             raise NotFoundException("Story", str(story_id))
         return story
@@ -129,10 +129,10 @@ class StoryService:
 
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
-    async def list_stories(self, module_id: uuid.UUID, page: int, size: int) -> PaginatedResponse[StoryResponse]:
-        await self._get_module_or_404(module_id)
+    async def list_stories(self, feature_id: uuid.UUID, page: int, size: int) -> PaginatedResponse[StoryResponse]:
+        await self._get_feature_or_404(feature_id)
         skip = (page - 1) * size
-        items, total = await self.repository.get_all_by_module(module_id, skip=skip, limit=size)
+        items, total = await self.repository.get_all_by_feature(feature_id, skip=skip, limit=size)
         return PaginatedResponse(
             items=[StoryResponse.model_validate(s) for s in items],
             total=total,
@@ -141,38 +141,38 @@ class StoryService:
             pages=math.ceil(total / size) if total else 0,
         )
 
-    async def get_story(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
-        story = await self._get_story_or_404(module_id, story_id)
+    async def get_story(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        story = await self._get_story_or_404(feature_id, story_id)
         return StoryResponse.model_validate(story)
 
-    async def create_story(self, module_id: uuid.UUID, payload: StoryCreate) -> StoryResponse:
-        await self._get_module_or_404(module_id)
-        story = Story(module_id=module_id, **payload.model_dump())
+    async def create_story(self, feature_id: uuid.UUID, payload: StoryCreate) -> StoryResponse:
+        await self._get_feature_or_404(feature_id)
+        story = Story(feature_id=feature_id, **payload.model_dump())
         story = await self.repository.create(story)
         return StoryResponse.model_validate(story)
 
-    async def update_story(self, module_id: uuid.UUID, story_id: uuid.UUID, payload: StoryUpdate) -> StoryResponse:
-        story = await self._get_story_or_404(module_id, story_id)
+    async def update_story(self, feature_id: uuid.UUID, story_id: uuid.UUID, payload: StoryUpdate) -> StoryResponse:
+        story = await self._get_story_or_404(feature_id, story_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(story, field, value)
         story = await self.repository.update(story)
         return StoryResponse.model_validate(story)
 
-    async def delete_story(self, module_id: uuid.UUID, story_id: uuid.UUID, delete_remote: bool = False) -> None:
+    async def delete_story(self, feature_id: uuid.UUID, story_id: uuid.UUID, delete_remote: bool = False) -> None:
         from app.services.jira_service import JiraService
 
-        story = await self._get_story_or_404(module_id, story_id)
+        story = await self._get_story_or_404(feature_id, story_id)
         if delete_remote and story.jira_issue_key:
             jira = JiraService()
             await jira.delete_issue(story.jira_issue_key)
         await self.repository.delete(story)
 
-    async def refine_story(self, module_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest) -> StoryResponse:
-        story = await self._get_story_or_404(module_id, story_id)
-        module = await self._get_module_or_404(module_id)
+    async def refine_story(self, feature_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest) -> StoryResponse:
+        story = await self._get_story_or_404(feature_id, story_id)
+        feature = await self._get_feature_or_404(feature_id)
 
-        tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(module.project_id, skip=0, limit=500)
-        plugins, _ = await self.plugin_repository.get_all_by_project(module.project_id, skip=0, limit=500)
+        tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(feature.project_id, skip=0, limit=500)
+        plugins, _ = await self.plugin_repository.get_all_by_project(feature.project_id, skip=0, limit=500)
         tech_context = _build_tech_context(tech_stacks, plugins)
 
         is_refinement = any([
@@ -199,7 +199,7 @@ class StoryService:
         )
 
         config_id = uuid.UUID(payload.config_id) if payload.config_id else None
-        ai_client = await get_project_ai_client(module.project_id, self.repository.session, config_id=config_id)
+        ai_client = await get_project_ai_client(feature.project_id, self.repository.session, config_id=config_id)
         result = await ai_client.chat_with_tools(
             tools=[_REFINE_STORY_TOOL],
             tool_choice={"type": "function", "function": {"name": "refine_story"}},
@@ -215,8 +215,8 @@ class StoryService:
                 {
                     "role": "user",
                     "content": (
-                        f"Module: {module.name}\n"
-                        f"Module description: {module.description or 'No description provided.'}\n\n"
+                        f"Feature: {feature.name}\n"
+                        f"Feature description: {feature.description or 'No description provided.'}\n\n"
                         f"Story: {story.title}\n"
                         f"Story description: {story.description or 'No description provided.'}\n\n"
                         f"{current_state}"
@@ -240,11 +240,11 @@ class StoryService:
 
     # ── JIRA Sync ────────────────────────────────────────────────────────────
 
-    async def sync_stories_to_jira(self, module_id: uuid.UUID) -> JiraSyncResult:
+    async def sync_stories_to_jira(self, feature_id: uuid.UUID) -> JiraSyncResult:
         from app.services.jira_service import JiraService
 
-        module = await self._get_module_or_404(module_id)
-        jira_project_key = await self._get_jira_project_key(module.project_id)
+        feature = await self._get_feature_or_404(feature_id)
+        jira_project_key = await self._get_jira_project_key(feature.project_id)
 
         jira = JiraService()
         jira_issues = await jira.fetch_all_issues(jira_project_key)
@@ -264,7 +264,7 @@ class StoryService:
             try:
                 user = assignee_map.get(issue.assignee_account_id) if issue.assignee_account_id else None
                 story = Story(
-                    module_id=module_id,
+                    feature_id=feature_id,
                     title=issue.title,
                     description=issue.description,
                     status=issue.status,
@@ -336,10 +336,10 @@ class StoryService:
 
         return account_id_to_user, users_linked
 
-    async def pull_story_from_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+    async def pull_story_from_jira(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
         from app.services.jira_service import JiraService
 
-        story = await self._get_story_or_404(module_id, story_id)
+        story = await self._get_story_or_404(feature_id, story_id)
         if not story.jira_issue_key:
             raise BadRequestException("Story is not linked to a JIRA issue.")
 
@@ -352,30 +352,30 @@ class StoryService:
         story = await self.repository.update(story)
         return StoryResponse.model_validate(story)
 
-    async def create_story_in_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+    async def create_story_in_jira(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
         from app.services.jira_service import JiraService
 
-        story = await self._get_story_or_404(module_id, story_id)
+        story = await self._get_story_or_404(feature_id, story_id)
         if story.jira_issue_key:
             raise ConflictException(f"Story is already linked to JIRA issue {story.jira_issue_key}.")
 
-        module = await self._get_module_or_404(module_id)
-        jira_project_key = await self._get_jira_project_key(module.project_id)
+        feature = await self._get_feature_or_404(feature_id)
+        jira_project_key = await self._get_jira_project_key(feature.project_id)
 
         jira = JiraService()
 
-        if not module.jira_epic_key:
+        if not feature.jira_epic_key:
             epic_key = await jira.create_issue(
                 jira_project_key=jira_project_key,
-                title=module.name,
-                description=module.description,
+                title=feature.name,
+                description=feature.description,
                 business_rules=None,
                 acceptance_criteria=None,
                 story_points=None,
                 issue_type=await jira._resolve_epic_type(jira_project_key),
             )
-            module.jira_epic_key = epic_key
-            await self.module_repository.update(module)
+            feature.jira_epic_key = epic_key
+            await self.feature_repository.update(feature)
 
         key = await jira.create_issue(
             jira_project_key=jira_project_key,
@@ -384,16 +384,16 @@ class StoryService:
             business_rules=story.business_rules,
             acceptance_criteria=story.acceptance_criteria,
             story_points=story.story_points,
-            parent_key=module.jira_epic_key,
+            parent_key=feature.jira_epic_key,
         )
         story.jira_issue_key = key
         story = await self.repository.update(story)
         return StoryResponse.model_validate(story)
 
-    async def update_story_in_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+    async def update_story_in_jira(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
         from app.services.jira_service import JiraService
 
-        story = await self._get_story_or_404(module_id, story_id)
+        story = await self._get_story_or_404(feature_id, story_id)
         if not story.jira_issue_key:
             raise BadRequestException("Story is not linked to a JIRA issue. Create it in JIRA first.")
 
@@ -408,10 +408,10 @@ class StoryService:
         )
         return StoryResponse.model_validate(story)
 
-    async def delete_story_from_jira(self, module_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+    async def delete_story_from_jira(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
         from app.services.jira_service import JiraService
 
-        story = await self._get_story_or_404(module_id, story_id)
+        story = await self._get_story_or_404(feature_id, story_id)
         if not story.jira_issue_key:
             raise BadRequestException("Story is not linked to a JIRA issue.")
 
@@ -423,10 +423,10 @@ class StoryService:
 
     # ── AI Generation ─────────────────────────────────────────────────────────
 
-    async def generate_stories(self, project_id: uuid.UUID, module_id: uuid.UUID, context: str | None = None, config_id: uuid.UUID | None = None) -> list[StoryResponse]:
-        module = await self.module_repository.get_by_project_and_id(project_id, module_id)
-        if not module:
-            raise NotFoundException("Module", str(module_id))
+    async def generate_stories(self, project_id: uuid.UUID, feature_id: uuid.UUID, context: str | None = None, config_id: uuid.UUID | None = None) -> list[StoryResponse]:
+        feature = await self.feature_repository.get_by_project_and_id(project_id, feature_id)
+        if not feature:
+            raise NotFoundException("Feature", str(feature_id))
 
         tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(project_id, skip=0, limit=500)
         plugins, _ = await self.plugin_repository.get_all_by_project(project_id, skip=0, limit=500)
@@ -440,7 +440,7 @@ class StoryService:
                 {
                     "role": "system",
                     "content": (
-                        "You are an expert software project manager who breaks down technical modules "
+                        "You are an expert software project manager who breaks down technical features "
                         "into clear, well-scoped user stories for development teams.\n\n"
                         f"Project tech stack:\n{tech_context}"
                     ),
@@ -448,9 +448,9 @@ class StoryService:
                 {
                     "role": "user",
                     "content": (
-                        f"Break down the following module into stories.\n\n"
-                        f"Module: {module.name}\n"
-                        f"Description: {module.description or 'No description provided.'}\n\n"
+                        f"Break down the following feature into stories.\n\n"
+                        f"Feature: {feature.name}\n"
+                        f"Description: {feature.description or 'No description provided.'}\n\n"
                         + (f"Additional context:\n{context}\n\n" if context else "")
                         + "Rules:\n"
                         "- Each story should be implementable in 1-3 days\n"
@@ -466,7 +466,7 @@ class StoryService:
                         "- Description should explain what needs to be built and why\n"
                         "- Story points: assign 3 for most stories (standard scope); use 5 only if clearly larger; never exceed 5\n"
                         "- Order stories by logical implementation sequence (dependencies first)\n"
-                        "- Generate as many stories as needed to fully cover the module"
+                        "- Generate as many stories as needed to fully cover the feature"
                     ),
                 },
             ],
@@ -476,7 +476,7 @@ class StoryService:
 
         stories = await self.repository.bulk_create([
             Story(
-                module_id=module_id,
+                feature_id=feature_id,
                 title=s["title"],
                 description=s.get("description"),
                 order=s.get("order", i),

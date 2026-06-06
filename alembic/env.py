@@ -14,7 +14,7 @@ import database.models.user  # noqa: F401
 import database.models.project_user  # noqa: F401
 import database.models.project_tech_stack  # noqa: F401
 import database.models.project_plugin  # noqa: F401
-import database.models.module  # noqa: F401
+import database.models.feature  # noqa: F401
 import database.models.story  # noqa: F401
 import database.models.test_case  # noqa: F401
 import database.models.prompt  # noqa: F401

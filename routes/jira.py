@@ -25,26 +25,26 @@ async def list_jira_issue_types(project_id: uuid.UUID, db: DBSession):
     return await story_controller.list_jira_issue_types(project_id=project_id, db=db)
 
 
-@router.post("/modules/{module_id}/stories/{story_id}/jira/pull", response_model=StoryResponse)
-async def pull_story_from_jira(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
-    return await story_controller.pull_story_from_jira(module_id=module_id, story_id=story_id, db=db)
+@router.post("/features/{feature_id}/stories/{story_id}/jira/pull", response_model=StoryResponse)
+async def pull_story_from_jira(feature_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
+    return await story_controller.pull_story_from_jira(feature_id=feature_id, story_id=story_id, db=db)
 
 
-@router.post("/modules/{module_id}/stories/jira/sync", response_model=JiraSyncResult)
-async def sync_stories_from_jira(module_id: uuid.UUID, db: DBSession):
-    return await story_controller.sync_stories_to_jira(module_id=module_id, db=db)
+@router.post("/features/{feature_id}/stories/jira/sync", response_model=JiraSyncResult)
+async def sync_stories_from_jira(feature_id: uuid.UUID, db: DBSession):
+    return await story_controller.sync_stories_to_jira(feature_id=feature_id, db=db)
 
 
-@router.post("/modules/{module_id}/stories/{story_id}/jira", response_model=StoryResponse)
-async def create_story_in_jira(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
-    return await story_controller.create_story_in_jira(module_id=module_id, story_id=story_id, db=db)
+@router.post("/features/{feature_id}/stories/{story_id}/jira", response_model=StoryResponse)
+async def create_story_in_jira(feature_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
+    return await story_controller.create_story_in_jira(feature_id=feature_id, story_id=story_id, db=db)
 
 
-@router.put("/modules/{module_id}/stories/{story_id}/jira", response_model=StoryResponse)
-async def update_story_in_jira(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
-    return await story_controller.update_story_in_jira(module_id=module_id, story_id=story_id, db=db)
+@router.put("/features/{feature_id}/stories/{story_id}/jira", response_model=StoryResponse)
+async def update_story_in_jira(feature_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
+    return await story_controller.update_story_in_jira(feature_id=feature_id, story_id=story_id, db=db)
 
 
-@router.delete("/modules/{module_id}/stories/{story_id}/jira", response_model=StoryResponse)
-async def delete_story_from_jira(module_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
-    return await story_controller.delete_story_from_jira(module_id=module_id, story_id=story_id, db=db)
+@router.delete("/features/{feature_id}/stories/{story_id}/jira", response_model=StoryResponse)
+async def delete_story_from_jira(feature_id: uuid.UUID, story_id: uuid.UUID, db: DBSession):
+    return await story_controller.delete_story_from_jira(feature_id=feature_id, story_id=story_id, db=db)

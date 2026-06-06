@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_client import get_project_ai_client
 from app.core.exceptions import NotFoundException
-from app.repositories.module_repository import ModuleRepository
+from app.repositories.feature_repository import FeatureRepository
 from app.repositories.story_repository import StoryRepository
 from app.repositories.test_case_repository import TestCaseRepository
 from app.schemas.common import PaginatedResponse
@@ -65,10 +65,10 @@ class TestCaseService:
     def __init__(self, session: AsyncSession):
         self.repository = TestCaseRepository(session)
         self.story_repository = StoryRepository(session)
-        self.module_repository = ModuleRepository(session)
+        self.feature_repository = FeatureRepository(session)
 
-    async def _get_story_or_404(self, module_id: uuid.UUID, story_id: uuid.UUID):
-        story = await self.story_repository.get_by_module_and_id(module_id, story_id)
+    async def _get_story_or_404(self, feature_id: uuid.UUID, story_id: uuid.UUID):
+        story = await self.story_repository.get_by_feature_and_id(feature_id, story_id)
         if not story:
             raise NotFoundException("Story", str(story_id))
         return story
@@ -82,9 +82,9 @@ class TestCaseService:
     # ── CRUD ─────────────────────────────────────────────────────────────────
 
     async def list_test_cases(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, page: int, size: int
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, page: int, size: int
     ) -> PaginatedResponse[TestCaseResponse]:
-        await self._get_story_or_404(module_id, story_id)
+        await self._get_story_or_404(feature_id, story_id)
         skip = (page - 1) * size
         items, total = await self.repository.get_all_by_story(story_id, skip=skip, limit=size)
         return PaginatedResponse(
@@ -96,24 +96,24 @@ class TestCaseService:
         )
 
     async def get_test_case(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID
     ) -> TestCaseResponse:
-        await self._get_story_or_404(module_id, story_id)
+        await self._get_story_or_404(feature_id, story_id)
         tc = await self._get_test_case_or_404(story_id, test_case_id)
         return TestCaseResponse.model_validate(tc)
 
     async def create_test_case(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, payload: TestCaseCreate
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, payload: TestCaseCreate
     ) -> TestCaseResponse:
-        await self._get_story_or_404(module_id, story_id)
+        await self._get_story_or_404(feature_id, story_id)
         tc = TestCase(story_id=story_id, **payload.model_dump())
         tc = await self.repository.create(tc)
         return TestCaseResponse.model_validate(tc)
 
     async def update_test_case(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID, payload: TestCaseUpdate
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID, payload: TestCaseUpdate
     ) -> TestCaseResponse:
-        await self._get_story_or_404(module_id, story_id)
+        await self._get_story_or_404(feature_id, story_id)
         tc = await self._get_test_case_or_404(story_id, test_case_id)
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(tc, field, value)
@@ -121,19 +121,19 @@ class TestCaseService:
         return TestCaseResponse.model_validate(tc)
 
     async def delete_test_case(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, test_case_id: uuid.UUID
     ) -> None:
-        await self._get_story_or_404(module_id, story_id)
+        await self._get_story_or_404(feature_id, story_id)
         tc = await self._get_test_case_or_404(story_id, test_case_id)
         await self.repository.delete(tc)
 
     # ── AI Generation ─────────────────────────────────────────────────────────
 
     async def generate_test_cases(
-        self, module_id: uuid.UUID, story_id: uuid.UUID, payload: TestCaseGenerateRequest
+        self, feature_id: uuid.UUID, story_id: uuid.UUID, payload: TestCaseGenerateRequest
     ) -> list[TestCaseResponse]:
-        story = await self._get_story_or_404(module_id, story_id)
-        module = await self.module_repository.get_by_id(module_id)
+        story = await self._get_story_or_404(feature_id, story_id)
+        feature = await self.feature_repository.get_by_id(feature_id)
 
         story_context = (
             f"Story: {story.title}\n"
@@ -151,7 +151,7 @@ class TestCaseService:
         )
 
         config_id = uuid.UUID(payload.config_id) if payload.config_id else None
-        ai_client = await get_project_ai_client(module.project_id, self.module_repository.session, config_id=config_id)
+        ai_client = await get_project_ai_client(feature.project_id, self.feature_repository.session, config_id=config_id)
         result = await ai_client.chat_with_tools(
             tools=[_GENERATE_TEST_CASES_TOOL],
             tool_choice={"type": "function", "function": {"name": "save_test_cases"}},

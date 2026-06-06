@@ -10,7 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.models.base import BaseModel
 
 if TYPE_CHECKING:
-    from database.models.module import Module
+    from database.models.feature import Feature
     from database.models.test_case import TestCase
     from database.models.user import User
 
@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 class Story(BaseModel):
     __tablename__ = "stories"
 
-    module_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("modules.id", ondelete="CASCADE"), nullable=False
+    feature_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("features.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -38,11 +38,11 @@ class Story(BaseModel):
     file_references: Mapped[str | None] = mapped_column(Text, nullable=True)
     urls: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    module: Mapped["Module | None"] = relationship("Module", back_populates="stories", lazy="noload")
+    feature: Mapped["Feature | None"] = relationship("Feature", back_populates="stories", lazy="noload")
     assignee: Mapped["User | None"] = relationship("User", foreign_keys="Story.assignee_id", lazy="noload")
     test_cases: Mapped[list["TestCase"]] = relationship("TestCase", back_populates="story", lazy="noload", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index("ix_stories_module_id", "module_id"),
+        Index("ix_stories_feature_id", "feature_id"),
         Index("ix_stories_status", "status"),
     )

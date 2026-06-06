@@ -4,27 +4,27 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ModuleStatus = Literal["draft", "ready", "in_progress", "done"]
+FeatureStatus = Literal["draft", "ready", "in_progress", "done"]
 
 
-class ModuleCreate(BaseModel):
+class FeatureCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: str | None = None
     order: int = Field(default=0, ge=0)
-    status: ModuleStatus = "draft"
+    status: FeatureStatus = "draft"
     priority: int = Field(default=0, ge=0)
     created_by: uuid.UUID
 
 
-class ModuleUpdate(BaseModel):
+class FeatureUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     order: int | None = Field(default=None, ge=0)
-    status: ModuleStatus | None = None
+    status: FeatureStatus | None = None
     priority: int | None = Field(default=None, ge=0)
 
 
-class ModuleResponse(BaseModel):
+class FeatureResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
