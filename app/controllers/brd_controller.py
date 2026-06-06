@@ -3,7 +3,13 @@ import uuid
 from fastapi import UploadFile
 
 from app.core.dependencies import DBSession
-from app.schemas.brd import BRDAnalysisResult, BRDBulkSaveRequest, BRDBulkSaveResponse
+from app.schemas.brd import (
+    BRDAnalysisResult,
+    BRDBulkSaveRequest,
+    BRDBulkSaveResponse,
+    BRDRefineRequest,
+    BRDRefineResponse,
+)
 from app.services.brd_service import BRDService
 
 
@@ -14,6 +20,14 @@ async def analyze_brd(
     config_id: uuid.UUID | None = None,
 ) -> BRDAnalysisResult:
     return await BRDService(db).analyze_brd(project_id=project_id, file=file, config_id=config_id)
+
+
+async def refine_item(
+    project_id: uuid.UUID,
+    payload: BRDRefineRequest,
+    db: DBSession,
+) -> BRDRefineResponse:
+    return await BRDService(db).refine_item(project_id=project_id, payload=payload)
 
 
 async def save_brd_analysis(

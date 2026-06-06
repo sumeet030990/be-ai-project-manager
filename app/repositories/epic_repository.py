@@ -2,9 +2,11 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.repositories.base import BaseRepository
 from database.models.epic import Epic
+from database.models.feature import Feature
 
 
 class EpicRepository(BaseRepository[Epic]):
@@ -33,3 +35,14 @@ class EpicRepository(BaseRepository[Epic]):
             select(Epic).where(Epic.project_id == project_id, Epic.id == epic_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_all_with_features_and_stories(self, project_id: uuid.UUID) -> list[Epic]:
+        result = await self.session.execute(
+            select(Epic)
+            .where(Epic.project_id == project_id)
+            .options(
+                selectinload(Epic.features).selectinload(Feature.stories)
+            )
+            .order_by(Epic.priority, Epic.order)
+        )
+        return list(result.scalars().all())

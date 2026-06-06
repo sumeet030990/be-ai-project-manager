@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ai_client import get_project_ai_client
 from app.core.exceptions import BadRequestException, NotFoundException
+from app.repositories.epic_repository import EpicRepository
 from app.repositories.feature_repository import FeatureRepository
 from app.repositories.project_repository import ProjectRepository
 from app.repositories.story_repository import StoryRepository
@@ -13,8 +14,13 @@ from app.schemas.brd import (
     BRDAnalysisResult,
     BRDBulkSaveRequest,
     BRDBulkSaveResponse,
-    BRDSyncStatus,
+    BRDEpicResult,
+    BRDFeatureResult,
+    BRDRefineRequest,
+    BRDRefineResponse,
+    BRDStoryResult,
 )
+from database.models.epic import Epic
 from database.models.feature import Feature
 from database.models.story import Story
 
@@ -36,23 +42,23 @@ _ANALYZE_BRD_TOOL: Any = {
                         "and used to inform AI story generation."
                     ),
                 },
-                "features": {
+                "epics": {
                     "type": "array",
-                    "description": "Features extracted from the BRD, ordered by logical implementation sequence.",
+                    "description": "Top-level epics extracted from the BRD, ordered by logical implementation sequence.",
                     "items": {
                         "type": "object",
                         "properties": {
                             "name": {
                                 "type": "string",
-                                "description": "Feature name — concise, action-oriented (e.g. 'User Authentication', 'Payment Processing')",
+                                "description": "Epic name — high-level business objective (e.g. 'User Management', 'Payment & Billing').",
                             },
                             "description": {
                                 "type": "string",
-                                "description": "Detailed description of what this feature entails and its business value.",
+                                "description": "Comprehensive description of the epic's scope, business value, and goals.",
                             },
                             "order": {
                                 "type": "integer",
-                                "description": "Implementation order, 1-based. Lower numbers should be built first.",
+                                "description": "Implementation order, 1-based. Foundational epics first.",
                             },
                             "priority": {
                                 "type": "integer",
@@ -60,32 +66,31 @@ _ANALYZE_BRD_TOOL: Any = {
                                 "minimum": 1,
                                 "maximum": 5,
                             },
-                            "stories": {
+                            "features": {
                                 "type": "array",
-                                "description": "User stories for this feature, ordered by implementation sequence.",
+                                "description": "Features that implement this epic, ordered by implementation sequence.",
                                 "items": {
                                     "type": "object",
                                     "properties": {
-                                        "title": {
+                                        "name": {
                                             "type": "string",
-                                            "description": (
-                                                "Story title with a type prefix: [FE] frontend, [BE] backend, "
-                                                "[API] API/integration, [DB] database, [Infra] infrastructure, [Test] testing."
-                                            ),
+                                            "description": "Feature name — a specific capability within the epic (e.g. 'User Registration', 'OAuth Login').",
                                         },
                                         "description": {
                                             "type": "string",
-                                            "description": "What needs to be built and why.",
+                                            "description": "Detailed description of what this feature entails and its business value.",
+                                        },
+                                        "business_rules": {
+                                            "type": "string",
+                                            "description": "Key business rules, constraints, and logic specific to this feature.",
+                                        },
+                                        "acceptance_criteria": {
+                                            "type": "string",
+                                            "description": "Testable acceptance criteria in Given/When/Then format or bullet points.",
                                         },
                                         "order": {
                                             "type": "integer",
-                                            "description": "Order within the feature, 1-based.",
-                                        },
-                                        "story_points": {
-                                            "type": "integer",
-                                            "description": "Fibonacci story points. Use 3 for standard scope, 5 for clearly larger work. Never exceed 5.",
-                                            "minimum": 1,
-                                            "maximum": 5,
+                                            "description": "Order within the epic, 1-based.",
                                         },
                                         "priority": {
                                             "type": "integer",
@@ -93,16 +98,88 @@ _ANALYZE_BRD_TOOL: Any = {
                                             "minimum": 1,
                                             "maximum": 5,
                                         },
+                                        "stories": {
+                                            "type": "array",
+                                            "description": "User stories for this feature, ordered by implementation sequence.",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "title": {
+                                                        "type": "string",
+                                                        "description": (
+                                                            "Story title with a type prefix: [FE] frontend, [BE] backend, "
+                                                            "[API] API/integration, [DB] database, [Infra] infrastructure, [Test] testing."
+                                                        ),
+                                                    },
+                                                    "description": {
+                                                        "type": "string",
+                                                        "description": "What needs to be built and why, including key technical considerations.",
+                                                    },
+                                                    "business_rules": {
+                                                        "type": "string",
+                                                        "description": "Business rules, edge cases, validations, and constraints for this story.",
+                                                    },
+                                                    "acceptance_criteria": {
+                                                        "type": "string",
+                                                        "description": "Testable acceptance criteria in Given/When/Then format or bullet points.",
+                                                    },
+                                                    "order": {
+                                                        "type": "integer",
+                                                        "description": "Order within the feature, 1-based.",
+                                                    },
+                                                    "story_points": {
+                                                        "type": "integer",
+                                                        "description": "Fibonacci story points. Use 3 for standard scope, 5 for larger work, 8 for very large. Max 13.",
+                                                        "minimum": 1,
+                                                        "maximum": 13,
+                                                    },
+                                                    "priority": {
+                                                        "type": "integer",
+                                                        "description": "Priority: 1=critical, 2=high, 3=medium, 4=low, 5=nice-to-have.",
+                                                        "minimum": 1,
+                                                        "maximum": 5,
+                                                    },
+                                                },
+                                                "required": ["title", "description", "business_rules", "acceptance_criteria", "order", "story_points", "priority"],
+                                            },
+                                        },
                                     },
-                                    "required": ["title", "description", "order", "story_points", "priority"],
+                                    "required": ["name", "description", "business_rules", "acceptance_criteria", "order", "priority", "stories"],
                                 },
                             },
                         },
-                        "required": ["name", "description", "order", "priority", "stories"],
+                        "required": ["name", "description", "order", "priority", "features"],
                     },
                 },
             },
-            "required": ["project_context", "features"],
+            "required": ["project_context", "epics"],
+        },
+    },
+}
+
+
+_REFINE_ITEM_TOOL: Any = {
+    "type": "function",
+    "function": {
+        "name": "return_refined_item",
+        "description": "Return the enriched item details.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Clear, detailed description of this item's scope and business value.",
+                },
+                "business_rules": {
+                    "type": "string",
+                    "description": "Specific business rules, constraints, validations, and edge cases.",
+                },
+                "acceptance_criteria": {
+                    "type": "string",
+                    "description": "Testable acceptance criteria in Given/When/Then format or as bullet points.",
+                },
+            },
+            "required": ["description"],
         },
     },
 }
@@ -144,73 +221,115 @@ def _normalize(s: str) -> str:
 
 
 def _enrich_with_sync_status(
-    ai_features: list[dict],
-    existing_features: list[Feature],
-) -> list[dict]:
-    existing_by_name: dict[str, Feature] = {
-        _normalize(f.name): f for f in existing_features
+    ai_epics: list[dict],
+    existing_epics: list[Epic],
+) -> list[BRDEpicResult]:
+    existing_by_name: dict[str, Epic] = {
+        _normalize(e.name): e for e in existing_epics
     }
 
-    enriched = []
-    for ai_feat in ai_features:
-        existing_feat = existing_by_name.get(_normalize(ai_feat["name"]))
+    enriched_epics = []
+    for ai_epic in ai_epics:
+        existing_epic = existing_by_name.get(_normalize(ai_epic["name"]))
 
-        if existing_feat is None:
-            feat_status = BRDSyncStatus.new
-            feat_existing_id = None
-            existing_stories_by_title: dict[str, Story] = {}
+        if existing_epic is None:
+            epic_status = "new"
+            epic_existing_id = None
+            existing_features_by_name: dict[str, Feature] = {}
         else:
-            ai_desc = (ai_feat.get("description") or "").strip()
-            ex_desc = (existing_feat.description or "").strip()
-            if ai_desc != ex_desc or existing_feat.priority != ai_feat.get("priority", 0):
-                feat_status = BRDSyncStatus.update
+            ai_desc = (ai_epic.get("description") or "").strip()
+            ex_desc = (existing_epic.description or "").strip()
+            if ai_desc != ex_desc or existing_epic.priority != ai_epic.get("priority", 0):
+                epic_status = "update"
             else:
-                feat_status = BRDSyncStatus.exists
-            feat_existing_id = str(existing_feat.id)
-            existing_stories_by_title = {
-                _normalize(s.title): s for s in (existing_feat.stories or [])
+                epic_status = "exists"
+            epic_existing_id = str(existing_epic.id)
+            existing_features_by_name = {
+                _normalize(f.name): f for f in (existing_epic.features or [])
             }
 
-        enriched_stories = []
-        for story in ai_feat.get("stories", []):
-            existing_story = existing_stories_by_title.get(_normalize(story["title"]))
+        enriched_features = []
+        for ai_feat in ai_epic.get("features", []):
+            existing_feat = existing_features_by_name.get(_normalize(ai_feat["name"]))
 
-            if existing_story is None:
-                story_status = BRDSyncStatus.new
-                story_existing_id = None
+            if existing_feat is None:
+                feat_status = "new"
+                feat_existing_id = None
+                existing_stories_by_title: dict[str, Story] = {}
             else:
-                ai_sdesc = (story.get("description") or "").strip()
-                ex_sdesc = (existing_story.description or "").strip()
-                if (
-                    ai_sdesc != ex_sdesc
-                    or existing_story.priority != story.get("priority", 0)
-                    or existing_story.story_points != story.get("story_points")
-                ):
-                    story_status = BRDSyncStatus.update
+                ai_fdesc = (ai_feat.get("description") or "").strip()
+                ex_fdesc = (existing_feat.description or "").strip()
+                if ai_fdesc != ex_fdesc or existing_feat.priority != ai_feat.get("priority", 0):
+                    feat_status = "update"
                 else:
-                    story_status = BRDSyncStatus.exists
-                story_existing_id = str(existing_story.id)
+                    feat_status = "exists"
+                feat_existing_id = str(existing_feat.id)
+                existing_stories_by_title = {
+                    _normalize(s.title): s for s in (existing_feat.stories or [])
+                }
 
-            enriched_stories.append({
-                **story,
-                "sync_status": story_status,
-                "existing_id": story_existing_id,
-            })
+            enriched_stories = []
+            for story in ai_feat.get("stories", []):
+                existing_story = existing_stories_by_title.get(_normalize(story["title"]))
 
-        enriched.append({
-            **ai_feat,
-            "stories": enriched_stories,
-            "sync_status": feat_status,
-            "existing_id": feat_existing_id,
-        })
+                if existing_story is None:
+                    story_status = "new"
+                    story_existing_id = None
+                else:
+                    ai_sdesc = (story.get("description") or "").strip()
+                    ex_sdesc = (existing_story.description or "").strip()
+                    if (
+                        ai_sdesc != ex_sdesc
+                        or existing_story.priority != story.get("priority", 0)
+                        or existing_story.story_points != story.get("story_points")
+                    ):
+                        story_status = "update"
+                    else:
+                        story_status = "exists"
+                    story_existing_id = str(existing_story.id)
 
-    return enriched
+                enriched_stories.append(BRDStoryResult(
+                    title=story["title"],
+                    description=story.get("description"),
+                    business_rules=story.get("business_rules"),
+                    acceptance_criteria=story.get("acceptance_criteria"),
+                    order=story["order"],
+                    story_points=story["story_points"],
+                    priority=story["priority"],
+                    sync_status=story_status,
+                    existing_id=story_existing_id,
+                ))
+
+            enriched_features.append(BRDFeatureResult(
+                name=ai_feat["name"],
+                description=ai_feat.get("description"),
+                business_rules=ai_feat.get("business_rules"),
+                acceptance_criteria=ai_feat.get("acceptance_criteria"),
+                order=ai_feat["order"],
+                priority=ai_feat["priority"],
+                stories=enriched_stories,
+                sync_status=feat_status,
+                existing_id=feat_existing_id,
+            ))
+
+        enriched_epics.append(BRDEpicResult(
+            name=ai_epic["name"],
+            description=ai_epic.get("description"),
+            order=ai_epic["order"],
+            priority=ai_epic["priority"],
+            features=enriched_features,
+            sync_status=epic_status,
+            existing_id=epic_existing_id,
+        ))
+
+    return enriched_epics
 
 
 class BRDService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.project_repository = ProjectRepository(session)
+        self.epic_repository = EpicRepository(session)
         self.feature_repository = FeatureRepository(session)
         self.story_repository = StoryRepository(session)
 
@@ -236,40 +355,96 @@ class BRDService:
         result = await ai_client.chat_with_tools(
             tools=[_ANALYZE_BRD_TOOL],
             tool_choice={"type": "function", "function": {"name": "save_brd_analysis"}},
-            max_tokens=8192,
+            max_tokens=6000,
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "You are an expert software architect and project manager. "
-                        "Analyze Business Requirements Documents and extract structured, actionable features and user stories.\n\n"
+                        "Analyze Business Requirements Documents and extract a structured hierarchy of Epics → Features → Stories.\n\n"
                         "Rules:\n"
-                        "- Group requirements into logical, cohesive features\n"
-                        "- Each feature should have 3-8 user stories covering all layers (FE, BE, API, DB, etc.)\n"
+                        "- EPICS = major business domains (3-6 epics), FEATURES = specific capabilities (2-5 per epic), STORIES = implementation tasks (3-6 per feature)\n"
                         "- Story titles must start with [FE], [BE], [API], [DB], [Infra], or [Test]\n"
-                        "- Order features by logical implementation sequence (foundational work first)\n"
-                        "- Priority 1=critical path, 5=enhancement\n"
-                        "- Story points: 3 for standard, 5 for larger. Never exceed 5.\n"
-                        "- project_context must be comprehensive enough for AI to generate detailed stories without the original document"
+                        "- Include description, business_rules, and acceptance_criteria for every feature and story\n"
+                        "- Order by logical implementation sequence. Priority: 1=critical, 5=enhancement\n"
+                        "- Be concise but complete — every field must be filled"
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "Analyze this Business Requirements Document. "
-                        "Extract all features with their user stories, and write a comprehensive project context.\n\n"
-                        f"Document:\n{text[:50000]}"
+                        "Analyze this BRD. Extract all epics, features, and user stories with descriptions, business rules, and acceptance criteria.\n\n"
+                        f"Document:\n{text[:12000]}"
                     ),
                 },
             ],
         )
 
-        existing_features = await self.feature_repository.get_all_with_stories_by_project(project_id)
-        enriched_features = _enrich_with_sync_status(result.arguments["features"], existing_features)
+        existing_epics = await self.epic_repository.get_all_with_features_and_stories(project_id)
+        enriched_epics = _enrich_with_sync_status(result.arguments["epics"], existing_epics)
 
         return BRDAnalysisResult(
             project_context=result.arguments["project_context"],
-            features=enriched_features,
+            epics=enriched_epics,
+        )
+
+    async def refine_item(
+        self,
+        project_id: uuid.UUID,
+        payload: BRDRefineRequest,
+    ) -> BRDRefineResponse:
+        project = await self.project_repository.get_by_id(project_id)
+        if not project:
+            raise NotFoundException("Project", str(project_id))
+
+        item_label = payload.title or payload.name or "item"
+        item_type_label = payload.item_type.capitalize()
+
+        current_info_parts = []
+        if payload.description:
+            current_info_parts.append(f"Current description:\n{payload.description}")
+        if payload.business_rules:
+            current_info_parts.append(f"Current business rules:\n{payload.business_rules}")
+        if payload.acceptance_criteria:
+            current_info_parts.append(f"Current acceptance criteria:\n{payload.acceptance_criteria}")
+        current_info = "\n\n".join(current_info_parts) if current_info_parts else "No details provided yet."
+
+        extra = f"\n\nAdditional context: {payload.context}" if payload.context else ""
+
+        ai_client = await get_project_ai_client(project_id, self.session, config_id=payload.config_id)
+        result = await ai_client.chat_with_tools(
+            tools=[_REFINE_ITEM_TOOL],
+            tool_choice={"type": "function", "function": {"name": "return_refined_item"}},
+            max_tokens=4096,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert software architect. Enrich software project items with detailed, "
+                        "actionable content that developers can implement directly.\n\n"
+                        "For epics: write a clear description of the business domain and goals.\n"
+                        "For features and stories: write a detailed description plus specific business rules "
+                        "(constraints, validations, edge cases, logic) and testable acceptance criteria "
+                        "(Given/When/Then format preferred).\n\n"
+                        "Be specific, concrete, and implementation-ready."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Refine this {item_type_label}: \"{item_label}\"\n\n"
+                        f"{current_info}"
+                        f"{extra}"
+                    ),
+                },
+            ],
+        )
+
+        args = result.arguments
+        return BRDRefineResponse(
+            description=args.get("description"),
+            business_rules=args.get("business_rules"),
+            acceptance_criteria=args.get("acceptance_criteria"),
         )
 
     async def save_brd_analysis(
@@ -281,70 +456,106 @@ class BRDService:
         if not project:
             raise NotFoundException("Project", str(project_id))
 
+        created_epics = 0
+        updated_epics = 0
         created_features = 0
         updated_features = 0
         created_stories = 0
         updated_stories = 0
 
-        for feat_data in payload.features:
-            if feat_data.existing_id:
-                existing_feature = await self.feature_repository.get_by_id(
-                    uuid.UUID(feat_data.existing_id)
-                )
-                if existing_feature:
-                    existing_feature.name = feat_data.name
-                    existing_feature.description = feat_data.description
-                    existing_feature.order = feat_data.order
-                    existing_feature.priority = feat_data.priority
-                    feature = await self.feature_repository.update(existing_feature)
-                    updated_features += 1
+        for epic_data in payload.epics:
+            if epic_data.existing_id:
+                existing_epic = await self.epic_repository.get_by_id(uuid.UUID(epic_data.existing_id))
+                if existing_epic:
+                    existing_epic.name = epic_data.name
+                    existing_epic.description = epic_data.description
+                    existing_epic.order = epic_data.order
+                    existing_epic.priority = epic_data.priority
+                    epic = await self.epic_repository.update(existing_epic)
+                    updated_epics += 1
                 else:
-                    feature = await self._create_feature(project_id, payload.created_by, feat_data)
-                    created_features += 1
+                    epic = await self._create_epic(project_id, payload.created_by, epic_data)
+                    created_epics += 1
             else:
-                feature = await self._create_feature(project_id, payload.created_by, feat_data)
-                created_features += 1
+                epic = await self._create_epic(project_id, payload.created_by, epic_data)
+                created_epics += 1
 
-            for story_data in feat_data.stories:
-                if story_data.existing_id:
-                    existing_story = await self.story_repository.get_by_id(
-                        uuid.UUID(story_data.existing_id)
-                    )
-                    if existing_story:
-                        existing_story.title = story_data.title
-                        existing_story.description = story_data.description
-                        existing_story.order = story_data.order
-                        existing_story.story_points = min(story_data.story_points, 5)
-                        existing_story.priority = story_data.priority
-                        await self.story_repository.update(existing_story)
-                        updated_stories += 1
+            for feat_data in epic_data.features:
+                if feat_data.existing_id:
+                    existing_feature = await self.feature_repository.get_by_id(uuid.UUID(feat_data.existing_id))
+                    if existing_feature:
+                        existing_feature.name = feat_data.name
+                        existing_feature.description = feat_data.description
+                        existing_feature.business_rules = feat_data.business_rules
+                        existing_feature.acceptance_criteria = feat_data.acceptance_criteria
+                        existing_feature.order = feat_data.order
+                        existing_feature.priority = feat_data.priority
+                        feature = await self.feature_repository.update(existing_feature)
+                        updated_features += 1
+                    else:
+                        feature = await self._create_feature(epic.id, payload.created_by, feat_data)
+                        created_features += 1
+                else:
+                    feature = await self._create_feature(epic.id, payload.created_by, feat_data)
+                    created_features += 1
+
+                for story_data in feat_data.stories:
+                    if story_data.existing_id:
+                        existing_story = await self.story_repository.get_by_id(uuid.UUID(story_data.existing_id))
+                        if existing_story:
+                            existing_story.title = story_data.title
+                            existing_story.description = story_data.description
+                            existing_story.business_rules = story_data.business_rules
+                            existing_story.acceptance_criteria = story_data.acceptance_criteria
+                            existing_story.order = story_data.order
+                            existing_story.story_points = min(story_data.story_points, 13)
+                            existing_story.priority = story_data.priority
+                            await self.story_repository.update(existing_story)
+                            updated_stories += 1
+                        else:
+                            await self._create_story(feature.id, story_data)
+                            created_stories += 1
                     else:
                         await self._create_story(feature.id, story_data)
                         created_stories += 1
-                else:
-                    await self._create_story(feature.id, story_data)
-                    created_stories += 1
 
         if payload.save_context and payload.project_context:
             project.project_info = payload.project_context
             await self.project_repository.update(project)
 
         return BRDBulkSaveResponse(
+            created_epics=created_epics,
+            updated_epics=updated_epics,
             created_features=created_features,
             updated_features=updated_features,
             created_stories=created_stories,
             updated_stories=updated_stories,
         )
 
-    async def _create_feature(self, project_id: uuid.UUID, created_by: uuid.UUID, feat_data) -> Feature:
-        feature = Feature(
+    async def _create_epic(self, project_id: uuid.UUID, created_by: uuid.UUID, epic_data) -> Epic:
+        epic = Epic(
             project_id=project_id,
+            created_by=created_by,
+            name=epic_data.name,
+            description=epic_data.description,
+            order=epic_data.order,
+            priority=epic_data.priority,
+            status="draft",
+        )
+        return await self.epic_repository.create(epic)
+
+    async def _create_feature(self, epic_id: uuid.UUID, created_by: uuid.UUID, feat_data) -> Feature:
+        feature = Feature(
+            epic_id=epic_id,
             created_by=created_by,
             name=feat_data.name,
             description=feat_data.description,
+            business_rules=feat_data.business_rules,
+            acceptance_criteria=feat_data.acceptance_criteria,
             order=feat_data.order,
             priority=feat_data.priority,
             status="draft",
+            is_ai_generated=True,
         )
         return await self.feature_repository.create(feature)
 
@@ -353,8 +564,10 @@ class BRDService:
             feature_id=feature_id,
             title=story_data.title,
             description=story_data.description,
+            business_rules=story_data.business_rules,
+            acceptance_criteria=story_data.acceptance_criteria,
             order=story_data.order,
-            story_points=min(story_data.story_points, 5),
+            story_points=min(story_data.story_points, 13),
             priority=story_data.priority,
             status="draft",
             is_ai_generated=True,

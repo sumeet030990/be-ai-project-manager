@@ -4,7 +4,13 @@ from fastapi import APIRouter, File, Form, UploadFile, status
 
 from app.controllers import brd_controller
 from app.core.dependencies import DBSession
-from app.schemas.brd import BRDAnalysisResult, BRDBulkSaveRequest, BRDBulkSaveResponse
+from app.schemas.brd import (
+    BRDAnalysisResult,
+    BRDBulkSaveRequest,
+    BRDBulkSaveResponse,
+    BRDRefineRequest,
+    BRDRefineResponse,
+)
 
 router = APIRouter(prefix="/projects/{project_id}/brd", tags=["BRD Analysis"])
 
@@ -21,6 +27,19 @@ async def analyze_brd(
         file=file,
         db=db,
         config_id=config_id,
+    )
+
+
+@router.post("/refine", response_model=BRDRefineResponse)
+async def refine_item(
+    project_id: uuid.UUID,
+    payload: BRDRefineRequest,
+    db: DBSession,
+):
+    return await brd_controller.refine_item(
+        project_id=project_id,
+        payload=payload,
+        db=db,
     )
 
 
