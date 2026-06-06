@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,6 +28,9 @@ class Feature(BaseModel):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    business_rules: Mapped[str | None] = mapped_column(Text, nullable=True)
+    acceptance_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     epic: Mapped["Epic"] = relationship("Epic", back_populates="features", lazy="noload")
     stories: Mapped[list["Story"]] = relationship("Story", back_populates="feature", lazy="noload")

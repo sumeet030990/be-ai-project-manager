@@ -5,7 +5,7 @@ from fastapi.responses import Response
 
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
-from app.schemas.feature import FeatureCreate, FeatureResponse, FeatureUpdate
+from app.schemas.feature import FeatureCreate, FeatureGenerateRequest, FeatureRefineRequest, FeatureResponse, FeatureUpdate
 from app.services.feature_service import FeatureService
 
 
@@ -28,3 +28,11 @@ async def update_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, payload: Fea
 async def delete_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, db: DBSession, delete_remote: bool = False) -> Response:
     await FeatureService(db).delete_feature(epic_id=epic_id, feature_id=feature_id, delete_remote=delete_remote)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+async def generate_features(epic_id: uuid.UUID, payload: FeatureGenerateRequest, db: DBSession) -> list[FeatureResponse]:
+    return await FeatureService(db).generate_features(epic_id=epic_id, payload=payload)
+
+
+async def refine_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, payload: FeatureRefineRequest, db: DBSession) -> FeatureResponse:
+    return await FeatureService(db).refine_feature(epic_id=epic_id, feature_id=feature_id, payload=payload)

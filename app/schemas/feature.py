@@ -22,6 +22,24 @@ class FeatureUpdate(BaseModel):
     order: int | None = Field(default=None, ge=0)
     status: FeatureStatus | None = None
     priority: int | None = Field(default=None, ge=0)
+    business_rules: str | None = None
+    acceptance_criteria: str | None = None
+
+
+class FeatureGenerateRequest(BaseModel):
+    context: str | None = None
+    config_id: str | None = None
+
+
+class FeatureRefineRequest(BaseModel):
+    context: str | None = None
+    config_id: str | None = None
+
+
+class FeatureRefineResponse(BaseModel):
+    description: str
+    business_rules: str
+    acceptance_criteria: str
 
 
 class FeatureResponse(BaseModel):
@@ -35,5 +53,8 @@ class FeatureResponse(BaseModel):
     order: int
     status: str
     priority: int
+    is_ai_generated: bool
+    business_rules: str | None
+    acceptance_criteria: str | None
     created_at: datetime
     updated_at: datetime

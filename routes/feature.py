@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from app.controllers import feature_controller
 from app.core.dependencies import DBSession
 from app.schemas.common import PaginatedResponse
-from app.schemas.feature import FeatureCreate, FeatureResponse, FeatureUpdate
+from app.schemas.feature import FeatureCreate, FeatureGenerateRequest, FeatureRefineRequest, FeatureResponse, FeatureUpdate
 
 router = APIRouter(prefix="/epics/{epic_id}/features", tags=["Features"])
 
@@ -21,14 +21,19 @@ async def list_features(
     return await feature_controller.list_features(epic_id=epic_id, page=page, size=size, db=db)
 
 
-@router.get("/{feature_id}", response_model=FeatureResponse)
-async def get_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, db: DBSession):
-    return await feature_controller.get_feature(epic_id=epic_id, feature_id=feature_id, db=db)
-
-
 @router.post("", response_model=FeatureResponse, status_code=status.HTTP_201_CREATED)
 async def create_feature(epic_id: uuid.UUID, payload: FeatureCreate, db: DBSession):
     return await feature_controller.create_feature(epic_id=epic_id, payload=payload, db=db)
+
+
+@router.post("/generate", response_model=list[FeatureResponse], status_code=status.HTTP_201_CREATED)
+async def generate_features(epic_id: uuid.UUID, payload: FeatureGenerateRequest, db: DBSession):
+    return await feature_controller.generate_features(epic_id=epic_id, payload=payload, db=db)
+
+
+@router.get("/{feature_id}", response_model=FeatureResponse)
+async def get_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, db: DBSession):
+    return await feature_controller.get_feature(epic_id=epic_id, feature_id=feature_id, db=db)
 
 
 @router.patch("/{feature_id}", response_model=FeatureResponse)
@@ -44,3 +49,8 @@ async def delete_feature(
     delete_remote: bool = Query(default=False),
 ) -> Response:
     return await feature_controller.delete_feature(epic_id=epic_id, feature_id=feature_id, db=db, delete_remote=delete_remote)
+
+
+@router.post("/{feature_id}/refine", response_model=FeatureResponse)
+async def refine_feature(epic_id: uuid.UUID, feature_id: uuid.UUID, payload: FeatureRefineRequest, db: DBSession):
+    return await feature_controller.refine_feature(epic_id=epic_id, feature_id=feature_id, payload=payload, db=db)
