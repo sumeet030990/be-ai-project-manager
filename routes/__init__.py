@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from routes.brd import router as brd_router
 from routes.company import router as company_router
+from routes.epic import router as epic_router
 from routes.jira import router as jira_router
 from routes.project_ai_config import router as project_ai_config_router
 from routes.feature import router as feature_router
@@ -23,6 +24,7 @@ api_router.include_router(company_router)
 api_router.include_router(project_router)
 api_router.include_router(project_tech_stack_router)
 api_router.include_router(project_plugin_router)
+api_router.include_router(epic_router)
 api_router.include_router(feature_router)
 api_router.include_router(sprint_router)
 api_router.include_router(story_router)

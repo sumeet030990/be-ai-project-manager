@@ -160,10 +160,11 @@ class SprintService:
         for story in stories:
             fid = story.feature_id
             if fid not in groups:
+                epic = story.feature.epic if story.feature else None
                 groups[fid] = BacklogFeatureGroup(
                     feature_id=fid,
                     feature_name=story.feature.name if story.feature else "",
-                    jira_epic_key=story.feature.jira_epic_key if story.feature else None,
+                    jira_epic_key=epic.jira_epic_key if epic else None,
                     stories=[],
                 )
             groups[fid].stories.append(StoryResponse.model_validate(story))

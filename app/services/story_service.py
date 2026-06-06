@@ -115,6 +115,14 @@ class StoryService:
             raise NotFoundException("Feature", str(feature_id))
         return feature
 
+    async def _get_feature_with_epic_or_404(self, feature_id: uuid.UUID):
+        feature = await self.feature_repository.get_by_id_with_epic(feature_id)
+        if not feature:
+            raise NotFoundException("Feature", str(feature_id))
+        if not feature.epic:
+            raise NotFoundException("Epic for Feature", str(feature_id))
+        return feature
+
     async def _get_story_or_404(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> Story:
         story = await self.repository.get_by_feature_and_id(feature_id, story_id)
         if not story:
@@ -169,10 +177,11 @@ class StoryService:
 
     async def refine_story(self, feature_id: uuid.UUID, story_id: uuid.UUID, payload: StoryRefineRequest) -> StoryResponse:
         story = await self._get_story_or_404(feature_id, story_id)
-        feature = await self._get_feature_or_404(feature_id)
+        feature = await self._get_feature_with_epic_or_404(feature_id)
+        project_id = feature.epic.project_id
 
-        tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(feature.project_id, skip=0, limit=500)
-        plugins, _ = await self.plugin_repository.get_all_by_project(feature.project_id, skip=0, limit=500)
+        tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(project_id, skip=0, limit=500)
+        plugins, _ = await self.plugin_repository.get_all_by_project(project_id, skip=0, limit=500)
         tech_context = _build_tech_context(tech_stacks, plugins)
 
         is_refinement = any([
@@ -199,7 +208,7 @@ class StoryService:
         )
 
         config_id = uuid.UUID(payload.config_id) if payload.config_id else None
-        ai_client = await get_project_ai_client(feature.project_id, self.repository.session, config_id=config_id)
+        ai_client = await get_project_ai_client(project_id, self.repository.session, config_id=config_id)
         result = await ai_client.chat_with_tools(
             tools=[_REFINE_STORY_TOOL],
             tool_choice={"type": "function", "function": {"name": "refine_story"}},
@@ -243,8 +252,8 @@ class StoryService:
     async def sync_stories_to_jira(self, feature_id: uuid.UUID) -> JiraSyncResult:
         from app.services.jira_service import JiraService
 
-        feature = await self._get_feature_or_404(feature_id)
-        jira_project_key = await self._get_jira_project_key(feature.project_id)
+        feature = await self._get_feature_with_epic_or_404(feature_id)
+        jira_project_key = await self._get_jira_project_key(feature.epic.project_id)
 
         jira = JiraService()
         jira_issues = await jira.fetch_all_issues(jira_project_key)
@@ -353,29 +362,32 @@ class StoryService:
         return StoryResponse.model_validate(story)
 
     async def create_story_in_jira(self, feature_id: uuid.UUID, story_id: uuid.UUID) -> StoryResponse:
+        from app.repositories.epic_repository import EpicRepository
         from app.services.jira_service import JiraService
 
         story = await self._get_story_or_404(feature_id, story_id)
         if story.jira_issue_key:
             raise ConflictException(f"Story is already linked to JIRA issue {story.jira_issue_key}.")
 
-        feature = await self._get_feature_or_404(feature_id)
-        jira_project_key = await self._get_jira_project_key(feature.project_id)
+        feature = await self._get_feature_with_epic_or_404(feature_id)
+        epic = feature.epic
+        jira_project_key = await self._get_jira_project_key(epic.project_id)
 
         jira = JiraService()
 
-        if not feature.jira_epic_key:
+        if not epic.jira_epic_key:
             epic_key = await jira.create_issue(
                 jira_project_key=jira_project_key,
-                title=feature.name,
-                description=feature.description,
+                title=epic.name,
+                description=epic.description,
                 business_rules=None,
                 acceptance_criteria=None,
                 story_points=None,
                 issue_type=await jira._resolve_epic_type(jira_project_key),
             )
-            feature.jira_epic_key = epic_key
-            await self.feature_repository.update(feature)
+            epic.jira_epic_key = epic_key
+            epic_repo = EpicRepository(self.repository.session)
+            await epic_repo.update(epic)
 
         key = await jira.create_issue(
             jira_project_key=jira_project_key,
@@ -384,7 +396,7 @@ class StoryService:
             business_rules=story.business_rules,
             acceptance_criteria=story.acceptance_criteria,
             story_points=story.story_points,
-            parent_key=feature.jira_epic_key,
+            parent_key=epic.jira_epic_key,
         )
         story.jira_issue_key = key
         story = await self.repository.update(story)
@@ -423,10 +435,9 @@ class StoryService:
 
     # ── AI Generation ─────────────────────────────────────────────────────────
 
-    async def generate_stories(self, project_id: uuid.UUID, feature_id: uuid.UUID, context: str | None = None, config_id: uuid.UUID | None = None) -> list[StoryResponse]:
-        feature = await self.feature_repository.get_by_project_and_id(project_id, feature_id)
-        if not feature:
-            raise NotFoundException("Feature", str(feature_id))
+    async def generate_stories(self, feature_id: uuid.UUID, context: str | None = None, config_id: uuid.UUID | None = None) -> list[StoryResponse]:
+        feature = await self._get_feature_with_epic_or_404(feature_id)
+        project_id = feature.epic.project_id
 
         project = await self.project_repository.get_by_id(project_id)
         tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(project_id, skip=0, limit=500)

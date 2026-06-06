@@ -52,13 +52,12 @@ async def delete_story(
 
 
 @router.post(
-    "/projects/{project_id}/features/{feature_id}/generate-stories",
+    "/features/{feature_id}/generate-stories",
     response_model=list[StoryResponse],
     status_code=status.HTTP_201_CREATED,
 )
-async def generate_stories(project_id: uuid.UUID, feature_id: uuid.UUID, db: DBSession, payload: StoryGenerateRequest | None = None):
+async def generate_stories(feature_id: uuid.UUID, db: DBSession, payload: StoryGenerateRequest | None = None):
     return await story_controller.generate_stories(
-        project_id=project_id,
         feature_id=feature_id,
         db=db,
         context=payload.context if payload else None,

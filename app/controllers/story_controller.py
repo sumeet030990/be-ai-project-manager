@@ -35,10 +35,10 @@ async def refine_story(feature_id: uuid.UUID, story_id: uuid.UUID, payload: Stor
     return await StoryService(db).refine_story(feature_id=feature_id, story_id=story_id, payload=payload)
 
 
-async def generate_stories(project_id: uuid.UUID, feature_id: uuid.UUID, db: DBSession, context: str | None = None, config_id: str | None = None) -> list[StoryResponse]:
+async def generate_stories(feature_id: uuid.UUID, db: DBSession, context: str | None = None, config_id: str | None = None) -> list[StoryResponse]:
     import uuid as _uuid
     resolved_config_id = _uuid.UUID(config_id) if config_id else None
-    return await StoryService(db).generate_stories(project_id=project_id, feature_id=feature_id, context=context, config_id=resolved_config_id)
+    return await StoryService(db).generate_stories(feature_id=feature_id, context=context, config_id=resolved_config_id)
 
 
 async def pull_story_from_jira(feature_id: uuid.UUID, story_id: uuid.UUID, db: DBSession) -> StoryResponse:

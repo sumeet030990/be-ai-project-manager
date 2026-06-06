@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.repositories.base import BaseRepository
+from database.models.epic import Epic
 from database.models.feature import Feature
 from database.models.sprint import Sprint
 from database.models.sprint_story import SprintStory
@@ -102,9 +103,13 @@ class SprintRepository(BaseRepository[Sprint]):
     # ── Backlog ───────────────────────────────────────────────────────────────
 
     async def get_backlog_stories(self, project_id: uuid.UUID) -> list[Story]:
-        """Stories belonging to project features that are not assigned to any sprint."""
+        """Stories belonging to project features (via epics) that are not assigned to any sprint."""
         all_sprint_story_ids_subq = select(SprintStory.story_id)
-        feature_ids_subq = select(Feature.id).where(Feature.project_id == project_id)
+        feature_ids_subq = (
+            select(Feature.id)
+            .join(Epic, Feature.epic_id == Epic.id)
+            .where(Epic.project_id == project_id)
+        )
 
         result = await self.session.execute(
             select(Story)
@@ -112,7 +117,10 @@ class SprintRepository(BaseRepository[Sprint]):
                 Story.feature_id.in_(feature_ids_subq),
                 ~Story.id.in_(all_sprint_story_ids_subq),
             )
-            .options(selectinload(Story.assignee), selectinload(Story.feature))
+            .options(
+                selectinload(Story.assignee),
+                selectinload(Story.feature).selectinload(Feature.epic),
+            )
             .order_by(Story.priority, Story.order)
         )
         return list(result.scalars().all())

@@ -10,15 +10,15 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.models.base import BaseModel
 
 if TYPE_CHECKING:
-    from database.models.epic import Epic
-    from database.models.story import Story
+    from database.models.project import Project
+    from database.models.feature import Feature
 
 
-class Feature(BaseModel):
-    __tablename__ = "features"
+class Epic(BaseModel):
+    __tablename__ = "epics"
 
-    epic_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("epics.id", ondelete="CASCADE"), nullable=False
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
@@ -28,11 +28,12 @@ class Feature(BaseModel):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    jira_epic_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    epic: Mapped["Epic"] = relationship("Epic", back_populates="features", lazy="noload")
-    stories: Mapped[list["Story"]] = relationship("Story", back_populates="feature", lazy="noload")
+    project: Mapped["Project"] = relationship("Project", back_populates="epics", lazy="noload")
+    features: Mapped[list["Feature"]] = relationship("Feature", back_populates="epic", lazy="noload")
 
     __table_args__ = (
-        Index("ix_features_epic_id", "epic_id"),
-        Index("ix_features_status", "status"),
+        Index("ix_epics_project_id", "project_id"),
+        Index("ix_epics_status", "status"),
     )
