@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.repositories.base import BaseRepository
 from database.models.feature import Feature
@@ -33,3 +34,12 @@ class FeatureRepository(BaseRepository[Feature]):
             select(Feature).where(Feature.project_id == project_id, Feature.id == feature_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_all_with_stories_by_project(self, project_id: uuid.UUID) -> list[Feature]:
+        result = await self.session.execute(
+            select(Feature)
+            .where(Feature.project_id == project_id)
+            .options(selectinload(Feature.stories))
+            .order_by(Feature.priority, Feature.order)
+        )
+        return list(result.scalars().all())

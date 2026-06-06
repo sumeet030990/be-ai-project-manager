@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from routes.brd import router as brd_router
 from routes.company import router as company_router
 from routes.jira import router as jira_router
 from routes.project_ai_config import router as project_ai_config_router
@@ -29,3 +30,4 @@ api_router.include_router(test_case_router)
 api_router.include_router(prompt_router)
 api_router.include_router(project_ai_config_router)
 api_router.include_router(jira_router)
+api_router.include_router(brd_router)
