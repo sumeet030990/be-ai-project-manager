@@ -428,6 +428,7 @@ class StoryService:
         if not feature:
             raise NotFoundException("Feature", str(feature_id))
 
+        project = await self.project_repository.get_by_id(project_id)
         tech_stacks, _ = await self.tech_stack_repository.get_all_by_project(project_id, skip=0, limit=500)
         plugins, _ = await self.plugin_repository.get_all_by_project(project_id, skip=0, limit=500)
         tech_context = _build_tech_context(tech_stacks, plugins)
@@ -442,7 +443,8 @@ class StoryService:
                     "content": (
                         "You are an expert software project manager who breaks down technical features "
                         "into clear, well-scoped user stories for development teams.\n\n"
-                        f"Project tech stack:\n{tech_context}"
+                        + (f"Project context:\n{project.project_info}\n\n" if project and project.project_info else "")
+                        + f"Project tech stack:\n{tech_context}"
                     ),
                 },
                 {
@@ -453,6 +455,7 @@ class StoryService:
                         f"Description: {feature.description or 'No description provided.'}\n\n"
                         + (f"Additional context:\n{context}\n\n" if context else "")
                         + "Rules:\n"
+                        "- Stories must align with the project description provided in the system prompt; ensure scope, terminology, and priorities reflect the project's goals\n"
                         "- Each story should be implementable in 1-3 days\n"
                         "- Title must start with a type tag in square brackets based on the work area:\n"
                         "  [FE] Frontend (UI, components, pages)\n"
