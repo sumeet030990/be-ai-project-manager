@@ -360,21 +360,52 @@ class BRDService:
                 {
                     "role": "system",
                     "content": (
-                        "You are an expert software architect and project manager. "
-                        "Analyze Business Requirements Documents and extract a structured hierarchy of Epics → Features → Stories.\n\n"
-                        "Rules:\n"
-                        "- EPICS = major business domains (3-6 epics), FEATURES = specific capabilities (2-5 per epic), STORIES = implementation tasks (3-6 per feature)\n"
-                        "- Story titles must start with [FE], [BE], [API], [DB], [Infra], or [Test]\n"
-                        "- Include description, business_rules, and acceptance_criteria for every feature and story\n"
-                        "- Order by logical implementation sequence. Priority: 1=critical, 5=enhancement\n"
-                        "- Be concise but complete — every field must be filled"
+                        "You are a senior software architect and project manager with deep expertise in full-stack systems, "
+                        "security, infrastructure, and product delivery.\n\n"
+                        "Your task: analyze the provided Business Requirements Document and produce a COMPLETE, PRODUCTION-READY "
+                        "breakdown of Epics → Features → Stories covering every aspect needed to build and ship the product.\n\n"
+                        "SCOPE — go beyond what is explicitly stated. You must infer and include:\n"
+                        "- Authentication, authorization, and role/permission management\n"
+                        "- All CRUD operations, search, filtering, pagination, and sorting\n"
+                        "- Data validation, error handling, and user-facing error messages\n"
+                        "- Audit logging, activity history, and soft deletes where appropriate\n"
+                        "- Email/notification flows (confirmation, alerts, reminders)\n"
+                        "- File upload/download if any entity has attachments\n"
+                        "- Reporting, dashboards, and data export (CSV/PDF) if the domain implies it\n"
+                        "- Admin panel / back-office capabilities\n"
+                        "- Performance: caching strategies, background jobs, async processing\n"
+                        "- Security: input sanitization, rate limiting, secrets management\n"
+                        "- Infrastructure & DevOps: CI/CD, environment config, database migrations\n"
+                        "- Onboarding, help, and empty-state UX for every major screen\n"
+                        "- Settings and profile management\n\n"
+                        "STRUCTURE RULES:\n"
+                        "- EPICS = major business domains (e.g. Auth, User Management, Core Feature, Notifications, Admin, Infra)\n"
+                        "- FEATURES = specific capabilities within an epic\n"
+                        "- STORIES = atomic implementation tasks; titles MUST start with [FE], [BE], [API], [DB], or [Test]\n"
+                        "- Every feature and story MUST have description, business_rules, and acceptance_criteria\n"
+                        "- Cover both happy-path AND edge cases in acceptance_criteria\n\n"
+                        "ORDERING — sequence everything by logical implementation dependency:\n"
+                        "1. Foundation first: DB schema, auth, core models\n"
+                        "2. Core domain logic next\n"
+                        "3. Integrations and side-effects (notifications, exports) after core\n"
+                        "4. Admin/reporting/infra last\n"
+                        "- Priority: 1=critical (blocks others), 2=high, 3=medium, 4=low, 5=enhancement\n"
+                        "- Within each epic, features must be ordered so no feature depends on a later one\n"
+                        "- Within each feature, stories must be ordered: [DB] → [BE]/[API] → [FE] → [Test]\n\n"
+                        "OUTPUT QUALITY:\n"
+                        "- Be thorough, not minimal — a missing story is a gap that will become a bug or rework\n"
+                        "- Every field must be filled — no empty strings, no 'TBD'\n"
+                        "- Acceptance criteria must be testable conditions, not vague statements"
                     ),
                 },
                 {
                     "role": "user",
                     "content": (
-                        "Analyze this BRD. Extract all epics, features, and user stories with descriptions, business rules, and acceptance criteria.\n\n"
-                        f"Document:\n{text[:12000]}"
+                        "Analyze the BRD below. Produce the COMPLETE epic/feature/story breakdown.\n\n"
+                        "Do NOT limit yourself to what is explicitly written — infer every capability required to build a production-ready system. "
+                        "Order everything by logical implementation sequence (foundations first, integrations last). "
+                        "Every item must have all fields filled with concrete, testable content.\n\n"
+                        f"BRD Document:\n{text[:12000]}"
                     ),
                 },
             ],
